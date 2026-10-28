@@ -187,8 +187,7 @@ function parseFeedback(raw: string): ParsedFeedback[] {
  */
 export function usePrIterationFeedback(
   section: AutofixSection,
-  autofix: ReturnType<typeof useExplorerAutofix>,
-  enabled: boolean
+  autofix: ReturnType<typeof useExplorerAutofix>
 ): {feedback: IterationFeedback[]; latestIterationIndex: number | null} {
   const currentStepStart = useMemo(
     () => section.blocks.findLastIndex(block => defined(block.message.metadata?.step)),
@@ -196,10 +195,6 @@ export function usePrIterationFeedback(
   );
 
   const blockFeedback = useMemo<IterationFeedback[]>(() => {
-    if (!enabled) {
-      return [];
-    }
-
     const repoStates = Object.values(autofix.runState?.repo_pr_states ?? {});
     const pushErrors = repoStates.filter(repo => repo.pr_creation_status === 'error');
     const errorCode = pushErrors.find(
@@ -255,7 +250,7 @@ export function usePrIterationFeedback(
         errorCode: status === 'error' ? errorCode : undefined,
       }));
     });
-  }, [section.blocks, section.status, autofix.runState, currentStepStart, enabled]);
+  }, [section.blocks, section.status, autofix.runState, currentStepStart]);
 
   const latestIterationIndex = useMemo(
     () =>
@@ -268,10 +263,6 @@ export function usePrIterationFeedback(
   );
 
   const queuedFeedback = useMemo<IterationFeedback[]>(() => {
-    if (!enabled) {
-      return [];
-    }
-
     return (autofix.runState?.queued_feedback ?? []).flatMap(raw => {
       const parsed = parseFeedbackItem(raw);
       if (!parsed) {
@@ -286,7 +277,7 @@ export function usePrIterationFeedback(
         },
       ];
     });
-  }, [autofix.runState?.queued_feedback, latestIterationIndex, enabled]);
+  }, [autofix.runState?.queued_feedback, latestIterationIndex]);
 
   const feedback = useMemo(
     () => [...blockFeedback, ...queuedFeedback].reverse(),
