@@ -504,7 +504,7 @@ INSTALLED_APPS: tuple[str, ...] = (
     "sentry.releases",
     "sentry.seer",
     "sentry.scm",
-    "sentry.cadence.apps.CadenceConfig",
+    "sentry.cadence",
 )
 
 # Silence internal hints from Django's system checks
