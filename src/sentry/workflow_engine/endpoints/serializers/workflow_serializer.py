@@ -45,6 +45,7 @@ class TriggerSerializerResponse(TypedDict, total=False):
 class WorkflowSerializerResponse(TypedDict):
     id: Annotated[str, ApiDescription("Alert ID")]
     name: Annotated[str, ApiDescription("Alert name")]
+    type: str
     organizationId: str
     createdBy: str | None
     dateCreated: datetime
@@ -123,6 +124,7 @@ class WorkflowSerializer(Serializer[WorkflowSerializerResponse]):
         return {
             "id": str(obj.id),
             "name": str(obj.name),
+            "type": obj.type,
             "organizationId": str(obj.organization_id),
             "createdBy": str(obj.created_by_id) if obj.created_by_id else None,
             "dateCreated": obj.date_added,
