@@ -7,6 +7,7 @@ import {ArtifactDetails} from 'sentry/components/events/autofix/v3/artifactDetai
 import {SeerMarkdown} from 'sentry/components/seer/markdown';
 import {useAutoScroll} from 'sentry/utils/useAutoScroll';
 import {hasValidContent} from 'sentry/views/seerExplorer/components/chat/shared';
+import {isSeerErrorBlock} from 'sentry/views/seerExplorer/types';
 
 interface ArtifactLoadingDetailsProps {
   blocks: AutofixSection['blocks'];
@@ -17,6 +18,46 @@ export function ArtifactLoadingDetails({
   loadingMessage,
   blocks,
 }: ArtifactLoadingDetailsProps) {
+  return (
+    <ArtifactBlocks blocks={blocks}>
+      <Flex align="center" gap="md">
+        <Spinner />
+        <Text variant="muted" density="compressed">
+          {loadingMessage}
+        </Text>
+      </Flex>
+    </ArtifactBlocks>
+  );
+}
+
+/**
+ * What a step wrote before it stopped, without the loading indicator. Seer's
+ * own error block is left out, since the caller explains why the step stopped.
+ */
+export function ArtifactPartialDetails({blocks}: {blocks: AutofixSection['blocks']}) {
+  const partialBlocks = blocks.filter(block => !isSeerErrorBlock(block));
+  if (!partialBlocks.some(hasBlockText)) {
+    return null;
+  }
+  return <ArtifactBlocks blocks={partialBlocks} />;
+}
+
+function hasBlockText(block: AutofixSection['blocks'][number]): boolean {
+  return (
+    block.message.role !== 'user' &&
+    ((hasValidContent(block.message.content) &&
+      block.message.content !== 'Thinking...') ||
+      hasValidContent(block.message.thinking_content))
+  );
+}
+
+function ArtifactBlocks({
+  blocks,
+  children,
+}: {
+  blocks: AutofixSection['blocks'];
+  children?: React.ReactNode;
+}) {
   const {containerRef, onScrollHandler} = useAutoScroll({key: blocks});
 
   return (
@@ -59,12 +100,7 @@ export function ArtifactLoadingDetails({
 
           return null;
         })}
-        <Flex align="center" gap="md">
-          <Spinner />
-          <Text variant="muted" density="compressed">
-            {loadingMessage}
-          </Text>
-        </Flex>
+        {children}
       </Stack>
     </ArtifactDetails>
   );

@@ -8,13 +8,17 @@ import {Text} from '@sentry/scraps/text';
 
 import {
   getAutofixArtifactFromSection,
+  isOutOfCreditsSection,
   isRootCauseArtifact,
   type AutofixSection,
   type useExplorerAutofix,
 } from 'sentry/components/events/autofix/useExplorerAutofix';
 import {ArtifactCard} from 'sentry/components/events/autofix/v3/artifactCard';
 import {ArtifactDetails} from 'sentry/components/events/autofix/v3/artifactDetails';
-import {ArtifactLoadingDetails} from 'sentry/components/events/autofix/v3/artifactLoadingDetails';
+import {
+  ArtifactLoadingDetails,
+  ArtifactPartialDetails,
+} from 'sentry/components/events/autofix/v3/artifactLoadingDetails';
 import {AutofixEvidence} from 'sentry/components/events/autofix/v3/autofixEvidence';
 import {AutofixResetPrompt} from 'sentry/components/events/autofix/v3/autofixResetPrompt';
 import {useAutofixSectionEvidence} from 'sentry/components/events/autofix/v3/useAutofixSectionEvidence';
@@ -22,6 +26,8 @@ import {useResetAutofixStep} from 'sentry/components/events/autofix/v3/useResetA
 import {useRethinkInChat} from 'sentry/components/events/autofix/v3/useRethinkInChat';
 import {artifactToMarkdown} from 'sentry/components/events/autofix/v3/utils';
 import {SeerMarkdown} from 'sentry/components/seer/markdown';
+import {OUT_OF_CREDITS_STEP_MESSAGE} from 'sentry/components/seer/outOfCredits/messages';
+import {SeerOutOfCreditsCta} from 'sentry/components/seer/outOfCredits/seerOutOfCreditsCta';
 import {t} from 'sentry/locale';
 import {defined} from 'sentry/utils/defined';
 import {useCopyToClipboard} from 'sentry/utils/useCopyToClipboard';
@@ -44,9 +50,13 @@ export function RootCauseCard({autofix, groupId, section}: RootCauseCardProps) {
     [artifact]
   );
 
+  const isOutOfCredits = isOutOfCreditsSection(section);
+
   const {canReset, shouldShowReset, setShouldShowReset, handleReset} =
     useResetAutofixStep({
       autofix,
+      // A re-run fails the same way until someone adds credits.
+      canReset: isOutOfCredits ? false : undefined,
       section,
       step: 'root_cause',
     });
@@ -58,6 +68,22 @@ export function RootCauseCard({autofix, groupId, section}: RootCauseCardProps) {
   });
 
   const evidence = useAutofixSectionEvidence({section});
+  const evidenceDetails =
+    evidence.length > 0 ? (
+      <ArtifactDetails>
+        <Text bold>{t('Evidence')}</Text>
+        <Flex gap="md" wrap="wrap">
+          {evidence.map(e => (
+            <AutofixEvidence
+              key={e.toolCall.id}
+              evidenceButtonProps={e.evidenceButtonProps}
+              groupId={groupId}
+              toolCall={e.toolCall}
+            />
+          ))}
+        </Flex>
+      </ArtifactDetails>
+    ) : null;
 
   return (
     <ArtifactCard
@@ -116,21 +142,13 @@ export function RootCauseCard({autofix, groupId, section}: RootCauseCardProps) {
               ) : null}
             </Fragment>
           ) : null}
-          {evidence.length > 0 && (
-            <ArtifactDetails>
-              <Text bold>{t('Evidence')}</Text>
-              <Flex gap="md" wrap="wrap">
-                {evidence.map(e => (
-                  <AutofixEvidence
-                    key={e.toolCall.id}
-                    evidenceButtonProps={e.evidenceButtonProps}
-                    groupId={groupId}
-                    toolCall={e.toolCall}
-                  />
-                ))}
-              </Flex>
-            </ArtifactDetails>
-          )}
+          {evidenceDetails}
+        </Fragment>
+      ) : isOutOfCredits ? (
+        <Fragment>
+          <ArtifactPartialDetails blocks={section.blocks} />
+          {evidenceDetails}
+          <SeerOutOfCreditsCta message={OUT_OF_CREDITS_STEP_MESSAGE.root_cause} />
         </Fragment>
       ) : (
         <ArtifactDetails>

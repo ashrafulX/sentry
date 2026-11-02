@@ -17,9 +17,12 @@ import {
 } from 'sentry/components/events/autofix/useExplorerAutofix';
 import {ArtifactCard} from 'sentry/components/events/autofix/v3/artifactCard';
 import {artifactToMarkdown} from 'sentry/components/events/autofix/v3/utils';
+import {getOutOfCreditsPRsMessage} from 'sentry/components/seer/outOfCredits/messages';
+import {SeerOutOfCreditsCta} from 'sentry/components/seer/outOfCredits/seerOutOfCreditsCta';
 import {t} from 'sentry/locale';
 import {defined} from 'sentry/utils/defined';
 import {useCopyToClipboard} from 'sentry/utils/useCopyToClipboard';
+import {isOutOfCreditsPRState} from 'sentry/views/seerExplorer/types';
 
 interface PullRequestsCardProps {
   autofix: ReturnType<typeof useExplorerAutofix>;
@@ -43,6 +46,8 @@ export function PullRequestsCard({autofix, section}: PullRequestsCardProps) {
     return null;
   }
 
+  const outOfCreditsPullRequests = artifact?.filter(isOutOfCreditsPRState) ?? [];
+
   return (
     <ArtifactCard
       icon={<IconPullRequest />}
@@ -54,6 +59,12 @@ export function PullRequestsCard({autofix, section}: PullRequestsCardProps) {
       }
     >
       {artifact?.map(pullRequest => {
+        // Retrying fails the same way until someone adds credits, so the CTA
+        // below stands in for the retry.
+        if (isOutOfCreditsPRState(pullRequest)) {
+          return null;
+        }
+
         if (pullRequest.pr_creation_status === 'creating') {
           const isUpdating = defined(pullRequest.pr_number);
           return (
@@ -95,6 +106,11 @@ export function PullRequestsCard({autofix, section}: PullRequestsCardProps) {
           </Flex>
         );
       })}
+      {outOfCreditsPullRequests.length > 0 && (
+        <SeerOutOfCreditsCta
+          message={getOutOfCreditsPRsMessage(outOfCreditsPullRequests)}
+        />
+      )}
     </ArtifactCard>
   );
 }

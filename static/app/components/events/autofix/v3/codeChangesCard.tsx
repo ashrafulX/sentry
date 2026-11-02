@@ -13,6 +13,7 @@ import {
   collectPatches,
   getAutofixArtifactFromSection,
   isCodeChangesArtifact,
+  isOutOfCreditsSection,
   isPrIterationBlock,
   isPrIterationPaused,
   type AutofixSection,
@@ -20,7 +21,10 @@ import {
 } from 'sentry/components/events/autofix/useExplorerAutofix';
 import {ArtifactCard} from 'sentry/components/events/autofix/v3/artifactCard';
 import {ArtifactDetails} from 'sentry/components/events/autofix/v3/artifactDetails';
-import {ArtifactLoadingDetails} from 'sentry/components/events/autofix/v3/artifactLoadingDetails';
+import {
+  ArtifactLoadingDetails,
+  ArtifactPartialDetails,
+} from 'sentry/components/events/autofix/v3/artifactLoadingDetails';
 import {AutofixResetPrompt} from 'sentry/components/events/autofix/v3/autofixResetPrompt';
 import {
   FeedbackList,
@@ -34,6 +38,8 @@ import {useResetAutofixStep} from 'sentry/components/events/autofix/v3/useResetA
 import {useRethinkInChat} from 'sentry/components/events/autofix/v3/useRethinkInChat';
 import {artifactToMarkdown} from 'sentry/components/events/autofix/v3/utils';
 import {SeerMarkdown} from 'sentry/components/seer/markdown';
+import {OUT_OF_CREDITS_STEP_MESSAGE} from 'sentry/components/seer/outOfCredits/messages';
+import {SeerOutOfCreditsCta} from 'sentry/components/seer/outOfCredits/seerOutOfCreditsCta';
 import {t, tn} from 'sentry/locale';
 import {defined} from 'sentry/utils/defined';
 import {useCopyToClipboard} from 'sentry/utils/useCopyToClipboard';
@@ -92,20 +98,31 @@ export function CodeChangesCard({autofix, groupId, section}: CodeChangesCardProp
     hasPrIterationFeature
   );
 
-  const loadingBlocks = useMemo(() => {
-    if (section.status !== 'processing') {
+  const isOutOfCredits = isOutOfCreditsSection(section);
+
+  // The blocks of the step that is running, or that stopped for credits.
+  const currentStepBlocks = useMemo(() => {
+    if (section.status !== 'processing' && !isOutOfCredits) {
       return [];
     }
     if (currentStepStart === -1) {
       return section.blocks;
     }
     return section.blocks.slice(currentStepStart);
-  }, [section.status, section.blocks, currentStepStart]);
+  }, [section.status, section.blocks, currentStepStart, isOutOfCredits]);
 
   const artifact = useMemo(() => {
     const sectionArtifact = getAutofixArtifactFromSection(section);
     return isCodeChangesArtifact(sectionArtifact) ? sectionArtifact : null;
   }, [section]);
+
+  // A step that stopped for credits keeps the diff it got to, which is not
+  // the finished artifact, so it can't be copied or turned into a PR.
+  const partialArtifact = useMemo(
+    () =>
+      isOutOfCredits ? (section.artifacts.findLast(isCodeChangesArtifact) ?? null) : null,
+    [isOutOfCredits, section.artifacts]
+  );
 
   const {copy} = useCopyToClipboard();
   const markdown = useMemo(
@@ -125,6 +142,8 @@ export function CodeChangesCard({autofix, groupId, section}: CodeChangesCardProp
   const isResetEligible =
     !isPaused &&
     !hasFailedOnlyPRs &&
+    // A re-run fails the same way until someone adds credits.
+    !isOutOfCredits &&
     (hasManualPrIterationFeature
       ? noCodingAgents && (hasPRs || autofix.runState?.status !== 'processing')
       : noCodingAgents && !hasPRs && autofix.runState?.status !== 'processing');
@@ -152,7 +171,10 @@ export function CodeChangesCard({autofix, groupId, section}: CodeChangesCardProp
     );
   }, [location, navigate, shouldShowReset]);
 
-  const patchesByRepo = useMemo(() => collectPatches(artifact ?? []), [artifact]);
+  const patchesByRepo = useMemo(
+    () => collectPatches(artifact ?? partialArtifact ?? []),
+    [artifact, partialArtifact]
+  );
 
   const shouldExpandDiffs = useMemo(() => {
     let lineCount = 0;
@@ -241,6 +263,32 @@ export function CodeChangesCard({autofix, groupId, section}: CodeChangesCardProp
     );
   }
 
+  const diffDetails = (
+    <Fragment>
+      <ArtifactDetails>
+        <Text>{summary}</Text>
+      </ArtifactDetails>
+      {Array.from(patchesByRepo.entries(), ([repo, patches]) => (
+        <ArtifactDetails key={repo}>
+          <Flex gap="lg">
+            <Text bold>{t('Repository:')}</Text>
+            <Text>{repo}</Text>
+          </Flex>
+          {patches.map((patch, index) => (
+            <FileDiffViewer
+              key={index}
+              patch={patch.patch}
+              fileUrl={patch.code_url}
+              showBorder
+              collapsible
+              defaultExpanded={shouldExpandDiffs}
+            />
+          ))}
+        </ArtifactDetails>
+      ))}
+    </Fragment>
+  );
+
   let content: React.ReactNode;
   if (section.status === 'processing') {
     content = (
@@ -249,7 +297,7 @@ export function CodeChangesCard({autofix, groupId, section}: CodeChangesCardProp
             the form available even mid-run. */}
         {shouldShowReset && showPrIterationForm && prIterationForm}
         <ArtifactLoadingDetails
-          blocks={loadingBlocks}
+          blocks={currentStepBlocks}
           loadingMessage={
             isIterating ? t('Iterating on PR…') : t('Implementing changes…')
           }
@@ -263,27 +311,21 @@ export function CodeChangesCard({autofix, groupId, section}: CodeChangesCardProp
           t('How can this code change be improved?'),
           t('Give seer additional context to improve this code change.')
         )}
-        <ArtifactDetails>
-          <Text>{summary}</Text>
-        </ArtifactDetails>
-        {Array.from(patchesByRepo.entries(), ([repo, patches]) => (
-          <ArtifactDetails key={repo}>
-            <Flex gap="lg">
-              <Text bold>{t('Repository:')}</Text>
-              <Text>{repo}</Text>
-            </Flex>
-            {patches.map((patch, index) => (
-              <FileDiffViewer
-                key={index}
-                patch={patch.patch}
-                fileUrl={patch.code_url}
-                showBorder
-                collapsible
-                defaultExpanded={shouldExpandDiffs}
-              />
-            ))}
-          </ArtifactDetails>
-        ))}
+        {diffDetails}
+      </Fragment>
+    );
+  } else if (isOutOfCredits) {
+    content = (
+      <Fragment>
+        <ArtifactPartialDetails blocks={currentStepBlocks} />
+        {patchesByRepo.size > 0 && diffDetails}
+        <SeerOutOfCreditsCta
+          message={
+            currentStepBlocks[0] && isPrIterationBlock(currentStepBlocks[0])
+              ? OUT_OF_CREDITS_STEP_MESSAGE.pr_iteration
+              : OUT_OF_CREDITS_STEP_MESSAGE.code_changes
+          }
+        />
       </Fragment>
     );
   } else if (explanation) {

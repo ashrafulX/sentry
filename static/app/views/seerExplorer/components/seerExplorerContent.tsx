@@ -838,6 +838,7 @@ export function SeerExplorerContent({
                   isQuestionPending ||
                   showReauth
                 }
+                outOfCredits={sessionData?.failure_reason === 'out_of_credits'}
                 pendingInput={pendingInput}
                 readOnly={readOnly}
                 showThinking={showThinking}
@@ -929,6 +930,8 @@ interface SeerExplorerTranscriptProps {
   blocks: Block[];
   getPageReferrer: () => string;
   interactionPending: boolean;
+  /** The run stopped because the organization ran out of Seer credits. */
+  outOfCredits: boolean;
   pendingInput: PendingUserInput | null;
   readOnly: boolean;
   runId: SeerExplorerRunId | null;
@@ -944,6 +947,7 @@ const SeerExplorerTranscript = memo(function SeerExplorerTranscript({
   blocks,
   getPageReferrer,
   interactionPending,
+  outOfCredits,
   pendingInput,
   readOnly,
   runId,
@@ -953,7 +957,7 @@ const SeerExplorerTranscript = memo(function SeerExplorerTranscript({
   // Walk the conversation once here rather than once per tool block.
   const latestTodos = useMemo(() => findLatestTodos(blocks), [blocks]);
 
-  return segments.map(segment => {
+  return segments.map((segment, segmentIndex) => {
     if (segment.kind === 'user') {
       // For slide-in animation that runs on mount. Avoid running this twice on user
       // blocks when blocks are hydrated.
@@ -976,6 +980,8 @@ const SeerExplorerTranscript = memo(function SeerExplorerTranscript({
         runId={runId ?? undefined}
         getPageReferrer={getPageReferrer}
         interactionPending={interactionPending}
+        // The run stopped at its end, so only the last response explains why.
+        outOfCredits={outOfCredits && segmentIndex === segments.length - 1}
         pendingInput={pendingInput}
         readOnly={readOnly}
         showThinking={showThinking}
