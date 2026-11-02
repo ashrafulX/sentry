@@ -5,6 +5,7 @@ category: patterns
 source: sentry/components/seer/outOfCredits/seerOutOfCreditsNotice
 ---
 
+import {SeerOutOfCreditsCta} from 'sentry/components/seer/outOfCredits/seerOutOfCreditsCta';
 import {SeerOutOfCreditsNotice} from 'sentry/components/seer/outOfCredits/seerOutOfCreditsNotice';
 import * as Storybook from 'sentry/stories';
 
@@ -20,15 +21,15 @@ the `SeerOutOfCreditsNotice` underneath it.
 
 ## Billing members
 
-Members with `org:billing` top up themselves. "Top up" links to the Seer wallet
-on the billing overview until the in-place top-up modal ships.
+Members with `org:billing` top up themselves. "Top up" opens the Seer credits
+modal in place, with the balance and the auto top-up settings.
 
 <Storybook.Demo>
-  <SeerOutOfCreditsNotice escalation="top-up" topUpTo="/settings/billing/overview/" />
+  <SeerOutOfCreditsNotice escalation="top-up" onTopUp={() => {}} />
 </Storybook.Demo>
 
 ```jsx
-<SeerOutOfCreditsNotice escalation="top-up" topUpTo="/settings/billing/overview/" />
+<SeerOutOfCreditsNotice escalation="top-up" onTopUp={openTopUpModal} />
 ```
 
 ## Everyone else
@@ -82,7 +83,7 @@ part way because it ran out.
 <Storybook.Demo>
   <SeerOutOfCreditsNotice
     escalation="top-up"
-    topUpTo="/settings/billing/overview/"
+    onTopUp={() => {}}
     message="Seer stopped because your organization ran out of credits."
   />
 </Storybook.Demo>
@@ -90,7 +91,22 @@ part way because it ran out.
 ```jsx
 <SeerOutOfCreditsNotice
   escalation="top-up"
-  topUpTo="/settings/billing/overview/"
+  onTopUp={openTopUpModal}
   message={t('Seer stopped because your organization ran out of credits.')}
 />
+```
+
+## For the signed-in viewer
+
+`SeerOutOfCreditsCta` itself, with the escalation getsentry picks for you. In
+getsentry, "Top up" and "Request credits" do the real thing: the modal reads and
+saves your org's Seer wallet, and the request emails your billing members. Open
+source renders nothing here.
+
+<Storybook.Demo>
+  <SeerOutOfCreditsCta />
+</Storybook.Demo>
+
+```jsx
+<SeerOutOfCreditsCta />
 ```

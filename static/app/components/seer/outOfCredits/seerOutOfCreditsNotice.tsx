@@ -1,6 +1,4 @@
 import {Alert} from '@sentry/scraps/alert';
-import {LinkButton} from '@sentry/scraps/button';
-import type {LinkProps} from '@sentry/scraps/link';
 
 import {t} from 'sentry/locale';
 
@@ -26,13 +24,9 @@ export interface SeerOutOfCreditsNoticeProps {
   message?: React.ReactNode;
   onRequestCredits?: () => void;
   /**
-   * Opens the top-up flow in place. Takes precedence over `topUpTo`.
+   * Opens the top-up modal in place.
    */
   onTopUp?: () => void;
-  /**
-   * Where "Top up" links to when there is no in-place top-up flow.
-   */
-  topUpTo?: LinkProps['to'];
 }
 
 const ESCALATION_DETAIL: Record<SeerOutOfCreditsEscalation, string> = {
@@ -50,7 +44,6 @@ export function SeerOutOfCreditsNotice({
   escalation,
   message,
   onTopUp,
-  topUpTo,
   onRequestCredits,
   isRequestingCredits,
 }: SeerOutOfCreditsNoticeProps) {
@@ -62,7 +55,6 @@ export function SeerOutOfCreditsNotice({
         <SeerOutOfCreditsAction
           escalation={escalation}
           onTopUp={onTopUp}
-          topUpTo={topUpTo}
           onRequestCredits={onRequestCredits}
           isRequestingCredits={isRequestingCredits}
         />
@@ -77,22 +69,11 @@ export function SeerOutOfCreditsNotice({
 function SeerOutOfCreditsAction({
   escalation,
   onTopUp,
-  topUpTo,
   onRequestCredits,
   isRequestingCredits,
 }: Omit<SeerOutOfCreditsNoticeProps, 'message'>) {
-  if (escalation === 'top-up') {
-    if (onTopUp) {
-      return <Alert.Button onClick={onTopUp}>{t('Top up')}</Alert.Button>;
-    }
-    if (topUpTo) {
-      return (
-        <LinkButton size="zero" to={topUpTo}>
-          {t('Top up')}
-        </LinkButton>
-      );
-    }
-    return null;
+  if (escalation === 'top-up' && onTopUp) {
+    return <Alert.Button onClick={onTopUp}>{t('Top up')}</Alert.Button>;
   }
 
   if (escalation === 'request' && onRequestCredits) {

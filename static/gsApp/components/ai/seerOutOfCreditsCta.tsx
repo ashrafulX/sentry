@@ -13,6 +13,7 @@ import {useOrganization} from 'sentry/utils/useOrganization';
 import {sendAddEventsRequest} from 'getsentry/actionCreators/upsell';
 import {useSubscription} from 'getsentry/hooks/useSubscription';
 import type {Subscription} from 'getsentry/types';
+import {openSeerTopUpModal} from 'getsentry/views/subscriptionPage/seerWallet/topUpModal';
 
 function getEscalation(
   organization: Organization,
@@ -51,9 +52,7 @@ export function SeerOutOfCreditsCta({message}: SeerOutOfCreditsCtaProps) {
     <SeerOutOfCreditsNotice
       escalation={getEscalation(organization, subscription)}
       message={message}
-      // The Seer wallet card on the billing overview is where credits are
-      // managed until there is an in-place top-up modal.
-      topUpTo={`/settings/${organization.slug}/billing/overview/`}
+      onTopUp={() => openSeerTopUpModal({organization})}
       onRequestCredits={handleRequestCredits}
       isRequestingCredits={isRequestingCredits}
     />

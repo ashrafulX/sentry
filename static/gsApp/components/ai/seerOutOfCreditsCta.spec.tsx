@@ -1,7 +1,14 @@
 import {OrganizationFixture} from 'sentry-fixture/organization';
 
 import {SubscriptionFixture} from 'getsentry-test/fixtures/subscription';
-import {act, render, screen, userEvent, waitFor} from 'sentry-test/reactTestingLibrary';
+import {
+  act,
+  render,
+  renderGlobalModal,
+  screen,
+  userEvent,
+  waitFor,
+} from 'sentry-test/reactTestingLibrary';
 
 import {SubscriptionStore} from 'getsentry/stores/subscriptionStore';
 
@@ -12,21 +19,39 @@ describe('SeerOutOfCreditsCta', () => {
     MockApiClient.clearMockResponses();
   });
 
-  it('lets billing members top up from the billing overview', () => {
+  it('lets billing members top up in a modal', async () => {
     const organization = OrganizationFixture({access: ['org:read', 'org:billing']});
     act(() =>
       SubscriptionStore.set(organization.slug, SubscriptionFixture({organization}))
     );
+    MockApiClient.addMockResponse({
+      url: `/customers/${organization.slug}/seer-wallet/`,
+      body: {
+        balance: 0,
+        creditPriceCents: 1,
+        included: {total: 500, remaining: 0, resetsAt: null},
+        purchased: {total: 0, remaining: 0, expiresAt: null},
+      },
+    });
+    MockApiClient.addMockResponse({
+      url: `/customers/${organization.slug}/seer-wallet/auto-top-up/`,
+      body: {
+        enabled: false,
+        thresholdCredits: 500,
+        topUpCredits: 1000,
+        dailySpendCapCents: 7500,
+      },
+    });
 
     render(<SeerOutOfCreditsCta />, {organization});
+    renderGlobalModal({organization});
 
     expect(
       screen.getByText(/Your organization is out of Seer credits/)
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', {name: 'Top up'})).toHaveAttribute(
-      'href',
-      `/settings/${organization.slug}/billing/overview/`
-    );
+    await userEvent.click(screen.getByRole('button', {name: 'Top up'}));
+    expect(await screen.findByText('0 credits')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', {name: 'Auto top-up'})).toBeInTheDocument();
     expect(
       screen.queryByRole('button', {name: 'Request credits'})
     ).not.toBeInTheDocument();
