@@ -1,4 +1,11 @@
-import {Fragment, type PropsWithChildren, type RefObject, useMemo, useRef} from 'react';
+import {
+  Fragment,
+  type PropsWithChildren,
+  type RefObject,
+  useEffect,
+  useMemo,
+  useRef,
+} from 'react';
 import {mergeProps} from '@react-aria/utils';
 import {IconArrow} from '@sentry/icons/arrow';
 import {IconBuilding} from '@sentry/icons/building';
@@ -6,6 +13,7 @@ import {IconCompass} from '@sentry/icons/compass';
 import {IconDashboard} from '@sentry/icons/dashboard';
 import {IconGraph} from '@sentry/icons/graph';
 import {IconIssues} from '@sentry/icons/issues';
+import {IconMail} from '@sentry/icons/mail';
 import {IconProject} from '@sentry/icons/project';
 import {IconSeer} from '@sentry/icons/seer';
 import {IconSettings} from '@sentry/icons/settings';
@@ -21,6 +29,7 @@ import Feature from 'sentry/components/acl/feature';
 import {ErrorBoundary} from 'sentry/components/errorBoundary';
 import {Override} from 'sentry/components/override';
 import {t} from 'sentry/locale';
+import {useLocalStorageState} from 'sentry/utils/useLocalStorageState';
 import {useOrganization} from 'sentry/utils/useOrganization';
 import {useProjects} from 'sentry/utils/useProjects';
 import {getReturnPath} from 'sentry/utils/useReturnPath';
@@ -34,6 +43,7 @@ import {
   NAVIGATION_SIDEBAR_SECONDARY_WIDTH_LOCAL_STORAGE_KEY,
   PRIMARY_SIDEBAR_WIDTH,
   SECONDARY_SIDEBAR_WIDTH,
+  getSettingsLastProjectKey,
   getSettingsReturnPathKey,
 } from 'sentry/views/navigation/constants';
 import {
@@ -204,7 +214,22 @@ export function SettingsPrimaryNavigationItems({
 }) {
   const {projects} = useProjects();
   const {scope: activeScope, projectSlug: activeProjectSlug} = useSettingsScope();
-  const projectSlug = activeProjectSlug ?? projects[0]?.slug;
+  // Stored by ID, not slug, so renaming the project does not lose it.
+  const [lastProjectId, setLastProjectId] = useLocalStorageState<string | null>(
+    getSettingsLastProjectKey(organizationSlug),
+    null
+  );
+  const activeProjectId = projects.find(({slug}) => slug === activeProjectSlug)?.id;
+
+  useEffect(() => {
+    if (activeProjectId && activeProjectId !== lastProjectId) {
+      setLastProjectId(activeProjectId);
+    }
+  }, [activeProjectId, lastProjectId, setLastProjectId]);
+
+  // The remembered project can be deleted or lose access since it was stored.
+  const rememberedProjectSlug = projects.find(({id}) => id === lastProjectId)?.slug;
+  const projectSlug = activeProjectSlug ?? rememberedProjectSlug ?? projects[0]?.slug;
   const projectSettingsPath = `/settings/${organizationSlug}/projects/`;
   const items = [
     {
@@ -287,6 +312,18 @@ export function PrimaryNavigationItems({listRef}: PrimaryNavigationItemsProps) {
 
   return (
     <Fragment>
+      {organization.features.includes('universal-inbox') && (
+        <PrimaryNavigation.ListItem>
+          <PrimaryNavigation.Link
+            to={`/${prefix}/inbox/`}
+            analyticsKey="inbox"
+            label={t('Inbox')}
+            {...makeNavigationItemProps('inbox', `/${prefix}/inbox/`)}
+          >
+            <IconMail />
+          </PrimaryNavigation.Link>
+        </PrimaryNavigation.ListItem>
+      )}
       <NavigationTourElement id={NavigationTour.ISSUES} title={null} description={null}>
         {tourProps => (
           <PrimaryNavigation.ListItem>

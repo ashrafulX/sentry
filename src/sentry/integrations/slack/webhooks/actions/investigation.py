@@ -6,20 +6,18 @@ from enum import StrEnum
 from typing import Any
 
 import orjson
+import sentry_sdk
 from rest_framework.response import Response
 
 from sentry.constants import ObjectStatus
 from sentry.integrations.services.integration import integration_service
 from sentry.integrations.slack.requests.action import SlackActionRequest
-from sentry.investigations.access import INVESTIGATION_SCOPES
-from sentry.investigations.endpoints.base import organization_project_ids
-from sentry.investigations.services import (
-    InvestigationSourceNotFound,
-    InvestigationValidationError,
-    resolve_investigation_source,
-)
+from sentry.investigations.services.breached_metrics import resolve_investigation_source
 from sentry.models.organization import Organization
 from sentry.models.organizationmember import InviteStatus, OrganizationMember
+from sentry.notebooks.access import INVESTIGATION_SCOPES
+from sentry.notebooks.endpoints.base import organization_project_ids
+from sentry.notebooks.services import InvestigationSourceNotFound, InvestigationValidationError
 from sentry.seer.entrypoints.operator import SeerInvestigationOperator
 from sentry.seer.entrypoints.slack.entrypoint import (
     SlackInvestigationEntrypoint,
@@ -63,11 +61,10 @@ def record_investigation_unavailable(
     integration_id: int,
     extra: Mapping[str, Any] | None = None,
 ) -> None:
-    metrics.incr(
-        "seer.entrypoint.slack.start_investigation.unavailable",
-        tags={"reason": str(reason)},
-        sample_rate=1.0,
-    )
+    name = "seer.entrypoint.slack.start_investigation.unavailable"
+    attributes = {"reason": str(reason)}
+    sentry_sdk.metrics.count(name, 1, attributes=attributes)
+    metrics.incr(name, tags=attributes, sample_rate=1.0)
     logger.warning(
         "slack.investigation.start_unavailable",
         extra={
