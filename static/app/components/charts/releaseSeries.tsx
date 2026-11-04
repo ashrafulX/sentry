@@ -4,7 +4,7 @@ import type {Query} from 'history';
 import memoize from 'lodash/memoize';
 import partition from 'lodash/partition';
 
-import {getFormat, formatDateTime} from '@sentry/scraps/dateTime';
+import {formatDateTime} from '@sentry/scraps/dateTime';
 
 import {addErrorMessage} from 'sentry/actionCreators/indicator';
 import type {Client} from 'sentry/api';
@@ -144,8 +144,9 @@ function buildReleaseSeries({
             return '';
           }
           const time = formatDateTime(data.value, {
-            format: getFormat({timeZone: true, year: true}),
-            utc: !!utc,
+            year: 'always',
+            showTimezone: true,
+            timezone: utc ? 'UTC' : undefined,
           });
           const version = escape(formatVersion(data.name, true));
           return [

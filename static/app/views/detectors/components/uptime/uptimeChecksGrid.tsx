@@ -141,9 +141,9 @@ function CheckInBodyCell({
         <TimeCell>
           <Tooltip
             maxWidth={300}
-            title={t('Checked at %s', <DateTime date={timestamp} seconds />)}
+            title={t('Checked at %s', <DateTime date={timestamp} precision="second" />)}
           >
-            <DateTime date={scheduledCheckTime} timeZone />
+            <DateTime date={scheduledCheckTime} showTimezone />
           </Tooltip>
         </TimeCell>
       );

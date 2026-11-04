@@ -60,11 +60,16 @@ function TimestampTooltipBody({
         <DescriptionList.Details>
           <TimestampValues>
             <AutoSelectText>
-              <DateTime date={timestampToUse} seconds milliseconds timeZone />
+              <DateTime date={timestampToUse} precision="millisecond" showTimezone />
             </AutoSelectText>
             {!isUTCLocalTimezone && (
               <AutoSelectText>
-                <DateTime date={timestampToUse} seconds milliseconds timeZone utc />
+                <DateTime
+                  date={timestampToUse}
+                  precision="millisecond"
+                  showTimezone
+                  timezone="UTC"
+                />
               </AutoSelectText>
             )}
             <TimestampLabel>
@@ -110,7 +115,7 @@ function TimestampTooltipBody({
               {observedTime ? (
                 <TimestampValues>
                   <AutoSelectText>
-                    <DateTime date={observedTime} seconds timeZone />
+                    <DateTime date={observedTime} precision="second" showTimezone />
                   </AutoSelectText>
                 </TimestampValues>
               ) : (

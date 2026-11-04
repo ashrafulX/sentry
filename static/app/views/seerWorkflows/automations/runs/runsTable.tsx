@@ -85,7 +85,7 @@ function RunRow({run}: {run: SeerAutomationRun}) {
           title={<TimeSince date={run.dateAdded} disabledAbsoluteTooltip />}
           showUnderline
         >
-          <DateTime date={run.dateAdded} timeZone />
+          <DateTime date={run.dateAdded} showTimezone />
         </Tooltip>
       </SimpleTable.RowCell>
       <SimpleTable.RowCell>

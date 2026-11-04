@@ -8,9 +8,8 @@ import type {
   CustomSeriesRenderItemParams,
   CustomSeriesRenderItemReturn,
 } from 'echarts';
-import moment from 'moment-timezone';
 
-import {getFormat} from '@sentry/scraps/dateTime';
+import {useDateTimeFormatter} from '@sentry/scraps/dateTime';
 
 import {closeModal} from 'sentry/actionCreators/modal';
 import {isChartHovered} from 'sentry/components/charts/utils';
@@ -82,6 +81,7 @@ interface ReleaseBubbleSeriesProps {
   bubblePadding: number;
   bubbleSize: number;
   buckets: Bucket[];
+  formatDateTime: ReturnType<typeof useDateTimeFormatter>;
   theme: Theme;
   timezone: string;
   onBucketClick?: (bucket: Bucket) => void;
@@ -92,6 +92,7 @@ interface ReleaseBubbleSeriesProps {
  * Creates a series item that is used to draw the release bubbles in a chart
  */
 function createReleaseBubbleSeries({
+  formatDateTime,
   buckets,
   theme,
   bubbleSize,
@@ -121,17 +122,8 @@ function createReleaseBubbleSeries({
     },
   }));
 
-  const formatBucketTimestamp = (timestamp: number) => {
-    // TODO: we might want to be smarter about formatting when the buckets are
-    // both in the same day, or if time difference is very small (e.g. hours)
-    const format = getFormat({
-      dateOnly: false,
-      timeOnly: false,
-      year: moment().year() !== moment(timestamp).year(),
-    });
-
-    return moment.tz(timestamp, timezone).format(format);
-  };
+  const formatBucketTimestamp = (timestamp: number) =>
+    formatDateTime(timestamp, {timezone, showTimezone: false});
 
   /**
    * Renders release bubbles underneath the main chart
@@ -379,6 +371,7 @@ export function useReleaseBubbles({
   desiredBuckets = 10,
   flags,
 }: UseReleaseBubblesParams) {
+  const formatDateTime = useDateTimeFormatter();
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
@@ -493,6 +486,7 @@ export function useReleaseBubbles({
     }
 
     const series = createReleaseBubbleSeries({
+      formatDateTime,
       yAxisIndex,
       alignInMiddle,
       buckets,
@@ -516,6 +510,7 @@ export function useReleaseBubbles({
     bubbleSize,
     buckets,
     handleBucketClick,
+    formatDateTime,
     options.timezone,
     theme,
     yAxisIndex,
