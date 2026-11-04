@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from sentry.seer.entrypoints.slack.out_of_credits import (
     OUT_OF_CREDITS_MESSAGE,
+    OUT_OF_CREDITS_NOT_STARTED_MESSAGE,
     REQUEST_CREDITS_LINK_TEXT,
     REQUEST_CREDITS_PROMPT,
     TOP_UP_LINK_TEXT,
@@ -62,4 +63,12 @@ class SeerCreditsLinkTest(TestCase):
         link = get_seer_credits_link(self.organization, self.user.id)
         assert format_out_of_credits_mrkdwn(link) == (
             f"{OUT_OF_CREDITS_MESSAGE} {TOP_UP_PROMPT} <{link.url}|{TOP_UP_LINK_TEXT}>"
+        )
+
+    @patch(GET_SCOPES, return_value=NON_BILLING_SCOPES)
+    def test_format_mrkdwn_not_started_message(self, _: object) -> None:
+        link = get_seer_credits_link(self.organization, self.user.id)
+        assert format_out_of_credits_mrkdwn(link, message=OUT_OF_CREDITS_NOT_STARTED_MESSAGE) == (
+            f"{OUT_OF_CREDITS_NOT_STARTED_MESSAGE} {REQUEST_CREDITS_PROMPT} "
+            f"<{link.url}|{REQUEST_CREDITS_LINK_TEXT}>"
         )

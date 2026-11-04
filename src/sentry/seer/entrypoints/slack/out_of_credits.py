@@ -8,6 +8,10 @@ from sentry.models.organization import Organization
 from sentry.models.organizationmember import OrganizationMember
 
 OUT_OF_CREDITS_MESSAGE = "Your organization is out of Seer credits, so Seer stopped here."
+# For replies where Seer never started, such as a mention turned away before the run begins.
+OUT_OF_CREDITS_NOT_STARTED_MESSAGE = (
+    "Your organization is out of Seer credits, so Seer can't answer this."
+)
 TOP_UP_PROMPT = "Add credits to continue."
 REQUEST_CREDITS_PROMPT = "Ask an organization owner or billing admin to add credits."
 TOP_UP_LINK_TEXT = "Add Seer credits"
@@ -54,6 +58,11 @@ def get_seer_credits_link(organization: Organization, user_id: int | None) -> Se
     )
 
 
-def format_out_of_credits_mrkdwn(link: SeerCreditsLink) -> str:
-    """The full out-of-credits reply as Slack mrkdwn, with the link inline."""
-    return f"{OUT_OF_CREDITS_MESSAGE} {link.prompt} <{link.url}|{link.text}>"
+def format_out_of_credits_mrkdwn(
+    link: SeerCreditsLink, *, message: str = OUT_OF_CREDITS_MESSAGE
+) -> str:
+    """The full out-of-credits reply as Slack mrkdwn, with the link inline.
+
+    Pass `message=OUT_OF_CREDITS_NOT_STARTED_MESSAGE` when Seer never started.
+    """
+    return f"{message} {link.prompt} <{link.url}|{link.text}>"
