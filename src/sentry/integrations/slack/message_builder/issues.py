@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime
+from functools import cached_property
 from typing import Any, cast
 
 import orjson
@@ -424,7 +425,11 @@ class SlackIssuesMessageBuilder(BlockSlackMessageBuilder):
         self.has_mentions_read_scope = has_mentions_read_scope
         self.workflow_id = workflow_id
         self.link_decorator = link_decorator
-        self._has_autofix = SeerAutofixOperator.has_access(
+
+    @cached_property
+    def _has_autofix(self) -> bool:
+        # Lazy, since the Seer credit check in can_trigger_autofix is an RPC to billing.
+        return SeerAutofixOperator.has_access(
             organization=self.group.organization, entrypoint_key=SeerEntrypointKey.SLACK
         ) and SeerAutofixOperator.can_trigger_autofix(group=self.group)
 
@@ -679,7 +684,7 @@ class SlackIssuesMessageBuilder(BlockSlackMessageBuilder):
                 )
 
         if actions:
-            if self._has_autofix and not self.is_unfurl:
+            if not self.is_unfurl and self._has_autofix:
                 autofix_button = SeerSlackRenderer.render_autofix_button(group=self.group)
                 # We have to coerce this since we're not using the proper SlackSDK client to emit this
                 # notification yet, it just takes JSON.

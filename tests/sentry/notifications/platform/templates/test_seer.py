@@ -87,6 +87,11 @@ class SeerAutofixUpdateTest(TestCase):
         update = self._create_update(AutofixStoppingPoint.OPEN_PR)
         assert update.has_next_trigger is False
 
+    def test_has_next_trigger_without_credits(self) -> None:
+        for point in AutofixStoppingPoint:
+            update = self._create_update(point).copy(update={"has_credits_for_next_step": False})
+            assert update.has_next_trigger is False
+
     @patch("sentry.notifications.platform.templates.seer.organization_service.get_option")
     def test_has_next_trigger_coding_disabled(self, mock_get_option: Mock) -> None:
         mock_get_option.return_value = False

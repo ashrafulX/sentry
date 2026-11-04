@@ -24,6 +24,7 @@ from sentry.notifications.platform.templates.seer import (
     SeerAgentResponse,
     SeerAgentWriteApproval,
     SeerAutofixError,
+    SeerAutofixTrigger,
     SeerAutofixUpdate,
     SeerInvestigationError,
     SeerInvestigationStarted,
@@ -56,6 +57,7 @@ from sentry.seer.entrypoints.metrics import (
     SlackEntrypointEventLifecycleMetric,
     SlackEntrypointInteractionType,
 )
+from sentry.seer.entrypoints.operator import SeerAutofixOperator
 from sentry.seer.entrypoints.registry import (
     agent_entrypoint_registry,
     autofix_entrypoint_registry,
@@ -234,6 +236,26 @@ def _get_handoff_target(project: Project) -> CodingAgentProviderType | None:
         )
         return None
     return target
+
+
+def _has_credits_for_next_step(data: SeerAutofixUpdate) -> bool:
+    """
+    Whether the org can afford the step the update's next-step button would start. Only checks
+    when that button would be shown, since the check is an RPC to billing.
+    """
+    # The handoff button hands the run to an external coding agent, not a Seer step.
+    if data.handoff_target and data.current_point == AutofixStoppingPoint.ROOT_CAUSE:
+        return True
+    if not data.has_next_trigger:
+        return True
+    next_point = SeerAutofixTrigger.from_update(data).stopping_point
+    try:
+        organization = Organization.objects.get_from_cache(id=data.organization_id)
+    except Organization.DoesNotExist:
+        return True
+    return SeerAutofixOperator.can_afford_autofix_step(
+        organization=organization, stopping_point=next_point
+    )
 
 
 def _get_missing_scope_settings_url(
@@ -587,6 +609,8 @@ class SlackAutofixEntrypoint(
                 return
 
         data = SeerAutofixUpdate(**data_kwargs)
+        if not _has_credits_for_next_step(data):
+            data = data.copy(update={"has_credits_for_next_step": False})
         schedule_all_thread_updates(
             threads=cache_payload["threads"],
             integration_id=cache_payload["integration_id"],

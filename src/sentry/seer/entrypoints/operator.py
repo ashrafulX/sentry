@@ -28,6 +28,7 @@ from sentry.seer.agent.on_completion_hook import AgentOnCompletionHook
 from sentry.seer.autofix.commit_author import commit_author_for_user
 from sentry.seer.autofix.constants import AutofixReferrer
 from sentry.seer.autofix.utils import AutofixStoppingPoint, get_automation_handoff
+from sentry.seer.credits import SeerOperation, can_run_seer_operation
 from sentry.seer.entrypoints.cache import (
     SeerOperatorAgentCache,
     SeerOperatorAutofixCache,
@@ -104,6 +105,18 @@ PROCESS_INVESTIGATION_TIMEOUT_SECONDS = 60
 
 AGENT_REFRESH_TIMEOUT_SECONDS = 60
 
+# The Seer operation (and so the credit check) for the autofix step a stopping point starts.
+AUTOFIX_STOPPING_POINT_TO_SEER_OPERATION: dict[AutofixStoppingPoint, SeerOperation] = {
+    AutofixStoppingPoint.ROOT_CAUSE: SeerOperation.AUTOFIX_ROOT_CAUSE,
+    AutofixStoppingPoint.SOLUTION: SeerOperation.AUTOFIX_SOLUTION,
+    AutofixStoppingPoint.CODE_CHANGES: SeerOperation.AUTOFIX_CODE_CHANGES,
+    AutofixStoppingPoint.OPEN_PR: SeerOperation.AUTOFIX_OPEN_PR,
+}
+
+NOT_ENOUGH_SEER_CREDITS_MESSAGE = (
+    "Your organization doesn't have enough Seer credits to run this step."
+)
+
 
 def has_seer_autofix_entrypoint_access(
     *,
@@ -161,7 +174,8 @@ class SeerAutofixOperator[CachePayloadT]:
     def can_trigger_autofix(cls, *, group: Group) -> bool:
         """
         Checks if a group is permitted to trigger autofix.
-        Validates Seer access for the organization, the issue category, and autofix quota.
+        Validates Seer access for the organization, the issue category, autofix quota, and
+        Seer credits for the root cause step.
         """
         from sentry import quotas
         from sentry.seer.autofix.utils import is_free_cohort_org, is_issue_category_eligible
@@ -176,6 +190,23 @@ class SeerAutofixOperator[CachePayloadT]:
                     data_category=DataCategory.SEER_AUTOFIX,
                 )
             )
+            # Last, since it's an RPC to billing when credit checks are enabled.
+            and cls.can_afford_autofix_step(
+                organization=group.organization,
+                stopping_point=AutofixStoppingPoint.ROOT_CAUSE,
+            )
+        )
+
+    @classmethod
+    def can_afford_autofix_step(
+        cls, *, organization: Organization, stopping_point: AutofixStoppingPoint
+    ) -> bool:
+        """
+        Checks if the organization has enough Seer credits to run the autofix step that
+        `stopping_point` starts. Always True unless Seer credit checks are enabled.
+        """
+        return can_run_seer_operation(
+            organization, AUTOFIX_STOPPING_POINT_TO_SEER_OPERATION[stopping_point]
         )
 
     def trigger_autofix(
@@ -259,6 +290,19 @@ class SeerAutofixOperator[CachePayloadT]:
                             has_complete_stage=has_complete_stage,
                         )
                     return
+
+            # Buttons are hidden when an org runs out of credits, but older messages may still
+            # have them, so check again before starting the step.
+            if not self.can_afford_autofix_step(
+                organization=group.organization, stopping_point=stopping_point
+            ):
+                with SeerOperatorEventLifecycleMetric(
+                    interaction_type=SeerOperatorInteractionType.ENTRYPOINT_ON_TRIGGER_AUTOFIX_ERROR,
+                    entrypoint_key=self.entrypoint.key,
+                ).capture():
+                    self.entrypoint.on_trigger_autofix_error(error=NOT_ENOUGH_SEER_CREDITS_MESSAGE)
+                lifecycle.record_halt(halt_reason="not_enough_seer_credits")
+                return
 
             try:
                 if not run_id:

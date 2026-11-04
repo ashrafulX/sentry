@@ -82,10 +82,17 @@ class SeerAutofixUpdate(NotificationData):
     pull_requests: list[SeerAutofixPullRequest] = Field(default_factory=list)
     summary: str | None = None
     handoff_target: CodingAgentProviderType | None = None
+    has_credits_for_next_step: bool = True
+    """
+    Whether the org has enough Seer credits to run the next autofix step. Checked once by the
+    sender rather than on render, since rendering happens once per thread.
+    """
     source: NotificationSource = NotificationSource.SEER_AUTOFIX_UPDATE
 
     @property
     def has_next_trigger(self) -> bool:
+        if not self.has_credits_for_next_step:
+            return False
         match self.current_point:
             case AutofixStoppingPoint.ROOT_CAUSE:
                 return True
