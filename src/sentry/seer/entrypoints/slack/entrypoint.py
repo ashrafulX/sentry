@@ -44,6 +44,7 @@ from sentry.seer.agent.client_models import (
     SeerRunState,
 )
 from sentry.seer.autofix.utils import AutofixStoppingPoint, CodingAgentProviderType
+from sentry.seer.credits import OUT_OF_CREDITS_FAILURE_REASON, OUT_OF_CREDITS_PR_ERROR_CODE
 from sentry.seer.endpoints.agent_request import (
     AgentApprovalRequestData,
     AgentApprovalRequestSerializer,
@@ -74,9 +75,7 @@ from sentry.seer.entrypoints.slack.messaging import (
     update_investigation_alert_message,
 )
 from sentry.seer.entrypoints.slack.out_of_credits import (
-    OUT_OF_CREDITS_FAILURE_REASON,
     OUT_OF_CREDITS_MESSAGE,
-    OUT_OF_CREDITS_PR_ERROR_CODE,
     SeerCreditsLink,
     get_seer_credits_link,
 )

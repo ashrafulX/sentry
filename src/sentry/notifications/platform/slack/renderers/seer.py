@@ -47,7 +47,7 @@ from sentry.notifications.platform.types import (
 )
 from sentry.seer.agent.client_models import RepoPRState
 from sentry.seer.autofix.utils import AutofixStoppingPoint, CodingAgentProviderType
-from sentry.seer.entrypoints.slack.out_of_credits import OUT_OF_CREDITS_PR_ERROR_CODE
+from sentry.seer.credits import OUT_OF_CREDITS_PR_ERROR_CODE
 
 if TYPE_CHECKING:
     from sentry.models.group import Group

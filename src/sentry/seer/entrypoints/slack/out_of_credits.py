@@ -7,12 +7,6 @@ from dataclasses import dataclass
 from sentry.models.organization import Organization
 from sentry.models.organizationmember import OrganizationMember
 
-# Seer's SeerRunState.failure_reason (and the seer.errored event's failure_reason) when a run
-# stopped because the org ran out of credits.
-OUT_OF_CREDITS_FAILURE_REASON = "out_of_credits"
-# RepoPRState.pr_creation_error_code when opening a PR failed for lack of credits.
-OUT_OF_CREDITS_PR_ERROR_CODE = "out_of_credits"
-
 OUT_OF_CREDITS_MESSAGE = "Your organization is out of Seer credits, so Seer stopped here."
 TOP_UP_PROMPT = "Add credits to continue."
 REQUEST_CREDITS_PROMPT = "Ask an organization owner or billing admin to add credits."

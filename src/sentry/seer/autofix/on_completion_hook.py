@@ -52,15 +52,12 @@ from sentry.seer.autofix.utils import (
     clear_preference_automation_handoff,
     get_automation_handoff,
 )
+from sentry.seer.credits import OUT_OF_CREDITS_FAILURE_REASON, OUT_OF_CREDITS_PR_ERROR_CODE
 from sentry.seer.entrypoints.operator import (
     SeerActivityAttribution,
     SeerAutofixOperator,
     process_autofix_updates,
     record_seer_activity,
-)
-from sentry.seer.entrypoints.slack.out_of_credits import (
-    OUT_OF_CREDITS_FAILURE_REASON,
-    OUT_OF_CREDITS_PR_ERROR_CODE,
 )
 from sentry.seer.milestones import reconcile_milestones
 from sentry.seer.models import (
