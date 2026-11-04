@@ -47,6 +47,7 @@ from sentry.notifications.platform.types import (
 )
 from sentry.seer.agent.client_models import RepoPRState
 from sentry.seer.autofix.utils import AutofixStoppingPoint, CodingAgentProviderType
+from sentry.seer.entrypoints.slack.out_of_credits import OUT_OF_CREDITS_PR_ERROR_CODE
 
 if TYPE_CHECKING:
     from sentry.models.group import Group
@@ -128,7 +129,7 @@ class SeerSlackRenderer(NotificationRenderer[SlackRenderable]):
                 text="Seer Autofix Trigger",
             )
         elif isinstance(data, SeerAutofixError):
-            return cls._render_autofix_error(data)
+            return cls._render_autofix_error(data, link_decorator)
         elif isinstance(data, SeerAutofixUpdate):
             return cls._render_autofix_update(data, link_decorator)
         elif isinstance(data, SeerAgentError):
@@ -190,14 +191,20 @@ class SeerSlackRenderer(NotificationRenderer[SlackRenderable]):
         )
 
     @classmethod
-    def _render_autofix_error(cls, data: SeerAutofixError) -> SlackRenderable:
-        return SlackRenderable(
-            blocks=[
-                SectionBlock(text=data.error_title),
-                SectionBlock(text=MarkdownTextObject(text=f">{data.error_message}")),
-            ],
-            text=f"Seer stumbled: {data.error_title}",
-        )
+    def _render_autofix_error(
+        cls, data: SeerAutofixError, link_decorator: NotificationLinkDecorator
+    ) -> SlackRenderable:
+        blocks: list[Block] = [
+            SectionBlock(text=data.error_title),
+            SectionBlock(text=MarkdownTextObject(text=f">{data.error_message}")),
+        ]
+        if data.credits_url and data.credits_link_text:
+            blocks.append(
+                cls.render_credits_link(
+                    link_decorator.decorate_url(data.credits_url), data.credits_link_text
+                )
+            )
+        return SlackRenderable(blocks=blocks, text=f"Seer stumbled: {data.error_title}")
 
     @classmethod
     def _render_autofix_update(
@@ -435,6 +442,13 @@ class SeerSlackRenderer(NotificationRenderer[SlackRenderable]):
                     )
                 )
 
+        if data.credits_url and data.credits_link_text:
+            blocks.append(
+                cls.render_credits_link(
+                    link_decorator.decorate_url(data.credits_url), data.credits_link_text
+                )
+            )
+
         if data.missing_scope_settings_url:
             blocks.extend(
                 cls.render_missing_scope_footer(
@@ -453,6 +467,8 @@ class SeerSlackRenderer(NotificationRenderer[SlackRenderable]):
                 return (
                     f"Updating {pr_text}..." if pr.pr_number else f"Creating a PR in {repo_text}..."
                 )
+            case "error" if pr.pr_creation_error_code == OUT_OF_CREDITS_PR_ERROR_CODE:
+                return f"Couldn't push to {pr_text}: your organization is out of Seer credits"
             case "error":
                 return f"Latest push failed for {pr_text}"
             case "completed":
@@ -517,6 +533,11 @@ class SeerSlackRenderer(NotificationRenderer[SlackRenderable]):
             blocks.append(ContextBlock(elements=[PlainTextObject(text=f"Run ID: {data.run_id}")]))
 
         return blocks
+
+    @classmethod
+    def render_credits_link(cls, url: str, text: str) -> Block:
+        """A link to add Seer credits, or to request them."""
+        return MarkdownBlock(text=f"<{url}|{text}>")
 
     @classmethod
     def render_missing_scope_footer(cls, settings_url: str) -> list[Block]:

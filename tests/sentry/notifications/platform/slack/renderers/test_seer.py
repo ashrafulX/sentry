@@ -27,6 +27,7 @@ from sentry.notifications.platform.templates.seer import (
     SeerAgentResponse,
     SeerAgentWriteApproval,
     SeerAutofixCodeChange,
+    SeerAutofixError,
     SeerAutofixPullRequest,
     SeerAutofixUpdate,
     SeerInvestigationConclusionTemplate,
@@ -44,6 +45,7 @@ from sentry.notifications.platform.types import (
     NotificationProviderKey,
     NotificationRenderedTemplate,
 )
+from sentry.seer.agent.client_models import RepoPRState
 from sentry.seer.autofix.utils import AutofixStoppingPoint
 from sentry.testutils.cases import TestCase
 from sentry.testutils.helpers.options import override_options
@@ -447,6 +449,51 @@ class SeerSlackRendererAgentTest(TestCase):
         footer_text = first_element.text
         assert "Reinstall" in footer_text
         assert "I can't read the whole thread" in footer_text
+
+    def test_render_agent_response_with_credits_link(self) -> None:
+        data = SeerAgentResponse(
+            run_id=MOCK_RUN_ID,
+            organization_id=self.organization.id,
+            summary="Your organization is out of Seer credits, so Seer stopped here.",
+            credits_url="https://sentry.io/settings/test/billing/overview/",
+            credits_link_text="Add Seer credits",
+        )
+        renderable = SeerSlackRenderer._render_agent_response(data, link_decorator(data))
+
+        blocks = renderable["blocks"]
+        assert len(blocks) == 2
+        assert isinstance(blocks[1], MarkdownBlock)
+        assert "|Add Seer credits>" in blocks[1].text
+        assert "/settings/test/billing/overview/" in blocks[1].text
+
+    def test_render_agent_pr_state_out_of_credits(self) -> None:
+        pr = RepoPRState(
+            repo_name="acme/web",
+            pr_creation_status="error",
+            pr_creation_error_code="out_of_credits",
+        )
+        assert SeerSlackRenderer._render_agent_pr_state(pr) == (
+            "Couldn't push to `acme/web`: your organization is out of Seer credits"
+        )
+
+    def test_render_autofix_error_with_credits_link(self) -> None:
+        data = SeerAutofixError(
+            organization_id=self.organization.id,
+            error_message="Your organization is out of Seer credits, so Seer stopped here.",
+            credits_url="https://sentry.io/settings/test/billing/overview/",
+            credits_link_text="Request Seer credits",
+        )
+        renderable = SeerSlackRenderer._render_autofix_error(data, link_decorator(data))
+
+        blocks = renderable["blocks"]
+        assert len(blocks) == 3
+        assert isinstance(blocks[2], MarkdownBlock)
+        assert "|Request Seer credits>" in blocks[2].text
+
+    def test_render_autofix_error_without_credits_link(self) -> None:
+        data = SeerAutofixError(organization_id=self.organization.id, error_message="Oops")
+        renderable = SeerSlackRenderer._render_autofix_error(data, link_decorator(data))
+        assert len(renderable["blocks"]) == 2
 
     def test_render_agent_response_no_footer_when_url_not_set(self) -> None:
         data = self._create_agent_response(summary="Some analysis")

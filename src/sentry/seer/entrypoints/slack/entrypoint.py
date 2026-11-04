@@ -73,6 +73,13 @@ from sentry.seer.entrypoints.slack.messaging import (
     update_existing_message,
     update_investigation_alert_message,
 )
+from sentry.seer.entrypoints.slack.out_of_credits import (
+    OUT_OF_CREDITS_FAILURE_REASON,
+    OUT_OF_CREDITS_MESSAGE,
+    OUT_OF_CREDITS_PR_ERROR_CODE,
+    SeerCreditsLink,
+    get_seer_credits_link,
+)
 from sentry.seer.entrypoints.types import (
     SeerAgentEntrypoint,
     SeerAutofixEntrypoint,
@@ -462,15 +469,27 @@ class SlackAutofixEntrypoint(
 
         match event_type:
             case SentryAppEventType.SEER_ERRORED:
+                error = SeerAutofixError(
+                    organization_id=cache_payload["organization_id"],
+                    error_message=AUTOFIX_RUN_FAILED_MESSAGE,
+                )
+                if event_payload.get("failure_reason") == OUT_OF_CREDITS_FAILURE_REASON:
+                    link = _get_credits_link(
+                        organization_id=cache_payload["organization_id"],
+                        user_id=event_payload.get("owner_user_id"),
+                    )
+                    error = SeerAutofixError(
+                        organization_id=cache_payload["organization_id"],
+                        error_message=_out_of_credits_text(link),
+                        credits_url=link.url if link else None,
+                        credits_link_text=link.text if link else None,
+                    )
                 # Posted to the whole thread: the run may have been started by anyone.
                 schedule_all_thread_updates(
                     threads=cache_payload["threads"],
                     integration_id=cache_payload["integration_id"],
                     organization_id=cache_payload["organization_id"],
-                    data=SeerAutofixError(
-                        organization_id=cache_payload["organization_id"],
-                        error_message=AUTOFIX_RUN_FAILED_MESSAGE,
-                    ),
+                    data=error,
                 )
                 logger.info("seer.entrypoint.slack.autofix_error_scheduled", extra=logging_ctx)
                 metrics.incr(
@@ -726,12 +745,16 @@ class SlackAgentEntrypoint(
             None,
         )
         repo_pr_states = _get_repo_pr_states(state)
+        pr_credits_link = _get_pr_credits_link(
+            organization_id=organization_id, state=state, prs=repo_pr_states
+        )
         for answer in answers:
             posted = replies.get(answer.id)
             if posted is None or "pr_status_hash" not in posted:
                 continue
             # Only the latest posted answer owns the thread's current PR status.
             prs = repo_pr_states if answer is latest else []
+            credits_link = pr_credits_link if answer is latest else None
             status_hash = _hash_pr_status(prs)
             if status_hash == posted["pr_status_hash"]:
                 continue
@@ -745,6 +768,8 @@ class SlackAgentEntrypoint(
                     summary=answer.message.content or "",
                     repo_pr_states=prs,
                     missing_scope_settings_url=posted.get("missing_scope_settings_url"),
+                    credits_url=credits_link.url if credits_link else None,
+                    credits_link_text=credits_link.text if credits_link else None,
                 ),
             )
             SlackSeerAgentReplyCache.set(
@@ -754,6 +779,31 @@ class SlackAgentEntrypoint(
 
 def _get_repo_pr_states(state: SeerRunState) -> list[RepoPRState]:
     return [state.repo_pr_states[repo] for repo in sorted(state.repo_pr_states)]
+
+
+def _get_credits_link(*, organization_id: int, user_id: int | None) -> SeerCreditsLink | None:
+    try:
+        organization = Organization.objects.get_from_cache(id=organization_id)
+    except Organization.DoesNotExist:
+        return None
+    return get_seer_credits_link(organization, user_id)
+
+
+def _get_pr_credits_link(
+    *, organization_id: int, state: SeerRunState, prs: Sequence[RepoPRState]
+) -> SeerCreditsLink | None:
+    """The credits link to show with PR status, if a PR push stopped for lack of credits."""
+    if not any(
+        pr.pr_creation_status == "error"
+        and pr.pr_creation_error_code == OUT_OF_CREDITS_PR_ERROR_CODE
+        for pr in prs
+    ):
+        return None
+    return _get_credits_link(organization_id=organization_id, user_id=state.owner_user_id)
+
+
+def _out_of_credits_text(link: SeerCreditsLink | None) -> str:
+    return f"{OUT_OF_CREDITS_MESSAGE} {link.prompt}" if link else OUT_OF_CREDITS_MESSAGE
 
 
 def _hash_pr_status(prs: Sequence[RepoPRState]) -> str:
@@ -831,6 +881,20 @@ def _next_agent_reply(
             "I sent you a message."
         )
         repo_pr_states: list[RepoPRState] = []
+    elif state.failure_reason == OUT_OF_CREDITS_FAILURE_REASON:
+        # Seer ends the turn with its own plain-text notice; reply with ours, which links to
+        # where credits can be added. Keyed on the last block so each stopped turn replies once.
+        key = f"out_of_credits:{state.blocks[-1].id}" if state.blocks else "out_of_credits"
+        if key in replies:
+            return None
+        link = _get_credits_link(organization_id=organization_id, user_id=state.owner_user_id)
+        return key, SeerAgentResponse(
+            run_id=state.run_id,
+            organization_id=organization_id,
+            summary=_out_of_credits_text(link),
+            credits_url=link.url if link else None,
+            credits_link_text=link.text if link else None,
+        )
     else:
         turn = next((turn for turn in reversed(state.get_turns()) if turn.answer), None)
         if turn is None or turn.answer is None:
@@ -843,6 +907,9 @@ def _next_agent_reply(
         summary = turn.answer.message.content or ""
         repo_pr_states = _get_repo_pr_states(state)
 
+    credits_link = _get_pr_credits_link(
+        organization_id=organization_id, state=state, prs=repo_pr_states
+    )
     return key, SeerAgentResponse(
         run_id=state.run_id,
         organization_id=organization_id,
@@ -854,6 +921,8 @@ def _next_agent_reply(
             channel_id=thread["channel_id"],
             thread_ts=thread["thread_ts"],
         ),
+        credits_url=credits_link.url if credits_link else None,
+        credits_link_text=credits_link.text if credits_link else None,
     )
 
 

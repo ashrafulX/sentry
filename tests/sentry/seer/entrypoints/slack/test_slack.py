@@ -71,6 +71,13 @@ from sentry.seer.entrypoints.slack.messaging import (
     send_thread_update,
     update_existing_message,
 )
+from sentry.seer.entrypoints.slack.out_of_credits import (
+    OUT_OF_CREDITS_MESSAGE,
+    REQUEST_CREDITS_LINK_TEXT,
+    REQUEST_CREDITS_PROMPT,
+    TOP_UP_LINK_TEXT,
+    TOP_UP_PROMPT,
+)
 from sentry.seer.entrypoints.types import SeerEntrypointKey
 from sentry.seer.models import SeerAutomationHandoffConfiguration, SeerProjectPreference
 from sentry.sentry_apps.event_types import SentryAppEventType
@@ -79,6 +86,13 @@ from sentry.testutils.asserts import assert_halt_metric
 from sentry.testutils.cases import TestCase
 from sentry.testutils.helpers.options import override_options
 from sentry.utils.locking import UnableToAcquireLock
+
+# org:billing is a getsentry scope, so stub member scopes rather than rely on its roles.
+GET_SCOPES = "sentry.seer.entrypoints.slack.out_of_credits.OrganizationMember.get_scopes"
+SEER_OUT_OF_CREDITS_TEXT = (
+    "Your organization doesn't have enough Seer credits for this, so I stopped here. "
+    "Add credits to continue."
+)
 
 
 class SlackAutofixEntrypointTest(TestCase):
@@ -311,6 +325,43 @@ class SlackAutofixEntrypointTest(TestCase):
         renderable = mock_send_threaded_message.call_args.kwargs["renderable"]
         assert "couldn't finish working on this issue" in str(renderable["blocks"])
         mock_send_threaded_ephemeral_message.assert_not_called()
+
+    @patch(GET_SCOPES, return_value=frozenset({"org:billing"}))
+    @patch.object(SeerAutofixOperator, "has_access", return_value=True)
+    @patch(
+        "sentry.integrations.slack.integration.SlackIntegration.send_threaded_message",
+        return_value={"ok": True, "ts": "1234567890.000100"},
+    )
+    def test_out_of_credits_run_posts_credits_link(
+        self,
+        mock_send_threaded_message: MagicMock,
+        _mock_has_access: MagicMock,
+        _mock_get_scopes: MagicMock,
+    ) -> None:
+        SeerOperatorAutofixCache.populate_post_autofix_cache(
+            entrypoint_key=SeerEntrypointKey.SLACK,
+            run_id=MOCK_RUN_ID,
+            cache_payload=self._get_entrypoint().create_autofix_cache_payload(),
+        )
+
+        with self.tasks():
+            process_autofix_updates(
+                event_type=SentryAppEventType.SEER_ERRORED,
+                event_payload={
+                    "run_id": MOCK_RUN_ID,
+                    "group_id": self.group.id,
+                    "failure_reason": "out_of_credits",
+                    "owner_user_id": self.user.id,
+                },
+                organization_id=self.organization.id,
+            )
+
+        blocks = str(mock_send_threaded_message.call_args.kwargs["renderable"]["blocks"])
+        assert OUT_OF_CREDITS_MESSAGE in blocks
+        assert TOP_UP_PROMPT in blocks
+        assert f"|{TOP_UP_LINK_TEXT}>" in blocks
+        assert f"/settings/{self.organization.slug}/billing/overview/" in blocks
+        assert "couldn't finish working on this issue" not in blocks
 
     @patch("sentry.integrations.slack.integration.SlackIntegration.send_threaded_ephemeral_message")
     @patch(
@@ -1208,6 +1259,76 @@ class SlackAgentEntrypointTest(TestCase):
         )
         second_data = mock_send.call_args.kwargs["data"]
         assert second_data.missing_scope_settings_url is None
+
+    @patch("sentry.seer.entrypoints.slack.entrypoint.send_thread_update", return_value="1.1")
+    def test_on_agent_update_out_of_credits_replies_with_request_link(
+        self, mock_send: MagicMock
+    ) -> None:
+        cache_payload = self._get_entrypoint().create_agent_cache_payload()
+        state = _agent_state(SEER_OUT_OF_CREDITS_TEXT)
+        state.status = "error"
+        state.failure_reason = "out_of_credits"
+
+        SlackAgentEntrypoint.on_agent_update(cache_payload=cache_payload, run_id=12345, state=state)
+        SlackAgentEntrypoint.on_agent_update(cache_payload=cache_payload, run_id=12345, state=state)
+
+        mock_send.assert_called_once()
+        data = mock_send.call_args.kwargs["data"]
+        assert isinstance(data, SeerAgentResponse)
+        assert data.summary == f"{OUT_OF_CREDITS_MESSAGE} {REQUEST_CREDITS_PROMPT}"
+        assert data.credits_link_text == REQUEST_CREDITS_LINK_TEXT
+        assert data.credits_url is not None
+        assert f"/settings/{self.organization.slug}/billing/overview/" in data.credits_url
+
+    @patch(GET_SCOPES, return_value=frozenset({"org:billing"}))
+    @patch("sentry.seer.entrypoints.slack.entrypoint.send_thread_update", return_value="1.1")
+    def test_on_agent_update_out_of_credits_replies_with_top_up_link_for_billing_owner(
+        self, mock_send: MagicMock, _mock_get_scopes: MagicMock
+    ) -> None:
+        cache_payload = self._get_entrypoint().create_agent_cache_payload()
+        state = _agent_state(SEER_OUT_OF_CREDITS_TEXT)
+        state.status = "error"
+        state.failure_reason = "out_of_credits"
+        state.owner_user_id = self.user.id
+
+        SlackAgentEntrypoint.on_agent_update(cache_payload=cache_payload, run_id=12345, state=state)
+
+        data = mock_send.call_args.kwargs["data"]
+        assert data.summary == f"{OUT_OF_CREDITS_MESSAGE} {TOP_UP_PROMPT}"
+        assert data.credits_link_text == TOP_UP_LINK_TEXT
+
+    @patch("sentry.seer.entrypoints.slack.entrypoint.send_thread_update", return_value="1.1")
+    def test_on_agent_update_pr_out_of_credits_adds_credits_link(
+        self, mock_send: MagicMock
+    ) -> None:
+        cache_payload = self._get_entrypoint().create_agent_cache_payload()
+        state = _agent_state("I tried to open a PR.")
+        pr = RepoPRState(
+            repo_name="acme/web",
+            pr_creation_status="error",
+            pr_creation_error_code="out_of_credits",
+        )
+        state.repo_pr_states[pr.repo_name] = pr
+
+        SlackAgentEntrypoint.on_agent_update(cache_payload=cache_payload, run_id=12345, state=state)
+
+        data = mock_send.call_args.kwargs["data"]
+        assert data.summary == "I tried to open a PR."
+        assert data.repo_pr_states == [pr]
+        assert data.credits_link_text == REQUEST_CREDITS_LINK_TEXT
+
+    @patch("sentry.seer.entrypoints.slack.entrypoint.send_thread_update", return_value="1.1")
+    def test_on_agent_update_pr_error_without_credits_has_no_link(
+        self, mock_send: MagicMock
+    ) -> None:
+        cache_payload = self._get_entrypoint().create_agent_cache_payload()
+        state = _agent_state("I tried to open a PR.")
+        pr = RepoPRState(repo_name="acme/web", pr_creation_status="error")
+        state.repo_pr_states[pr.repo_name] = pr
+
+        SlackAgentEntrypoint.on_agent_update(cache_payload=cache_payload, run_id=12345, state=state)
+
+        assert mock_send.call_args.kwargs["data"].credits_url is None
 
     @patch("sentry.seer.entrypoints.slack.entrypoint.send_thread_update", return_value="1.1")
     def test_on_agent_update_does_not_duplicate_answers(self, mock_send: MagicMock) -> None:

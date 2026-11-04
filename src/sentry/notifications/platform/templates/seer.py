@@ -37,6 +37,9 @@ class SeerAutofixError(NotificationData):
     error_message: str
     source: NotificationSource = NotificationSource.SEER_AUTOFIX_ERROR
     error_title: str = "Seer had some trouble..."
+    # Set when the run stopped for lack of Seer credits: where to add or request them.
+    credits_url: str | None = None
+    credits_link_text: str | None = None
 
 
 @template_registry.register(NotificationSource.SEER_AUTOFIX_ERROR)
@@ -197,6 +200,9 @@ class SeerAgentResponse(NotificationData):
     summary: str
     missing_scope_settings_url: str | None = None
     repo_pr_states: list[RepoPRState] = Field(default_factory=list)
+    # Set when the run, or a PR it tried to open, stopped for lack of Seer credits.
+    credits_url: str | None = None
+    credits_link_text: str | None = None
     source: NotificationSource = NotificationSource.SEER_AGENT_RESPONSE
 
 

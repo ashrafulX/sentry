@@ -58,6 +58,10 @@ from sentry.seer.entrypoints.operator import (
     process_autofix_updates,
     record_seer_activity,
 )
+from sentry.seer.entrypoints.slack.out_of_credits import (
+    OUT_OF_CREDITS_FAILURE_REASON,
+    OUT_OF_CREDITS_PR_ERROR_CODE,
+)
 from sentry.seer.milestones import reconcile_milestones
 from sentry.seer.models import (
     SeerAgentRun,
@@ -183,7 +187,7 @@ class AutofixOnCompletionHook(AgentOnCompletionHook):
         if not cls._run_completed(organization, run_id, state):
             if state.status == "error":
                 cls._notify_entrypoints_of_failure(
-                    organization, run_id, group, state.failure_reason
+                    organization, run_id, group, state.failure_reason, state.owner_user_id
                 )
             return
 
@@ -288,6 +292,7 @@ class AutofixOnCompletionHook(AgentOnCompletionHook):
         run_id: int,
         group: Group,
         failure_reason: str | None,
+        owner_user_id: int | None = None,
     ) -> None:
         """
         Tells entrypoints (e.g. a Slack thread waiting on the run) that the run failed.
@@ -306,6 +311,7 @@ class AutofixOnCompletionHook(AgentOnCompletionHook):
                     "run_id": run_id,
                     "group_id": group.id,
                     "failure_reason": failure_reason,
+                    "owner_user_id": owner_user_id,
                 },
                 "organization_id": organization.id,
             }
@@ -395,8 +401,16 @@ class AutofixOnCompletionHook(AgentOnCompletionHook):
             if state.repo_pr_states and not pull_requests:
                 # Seer adds one entry per repository before asking the provider to open
                 # a PR. If every request fails, the entries remain but there is no PR.
+                out_of_credits = any(
+                    pr.pr_creation_error_code == OUT_OF_CREDITS_PR_ERROR_CODE
+                    for pr in state.repo_pr_states.values()
+                )
                 cls._notify_entrypoints_of_failure(
-                    organization, run_id, group, PR_CREATION_FAILED_REASON
+                    organization,
+                    run_id,
+                    group,
+                    OUT_OF_CREDITS_FAILURE_REASON if out_of_credits else PR_CREATION_FAILED_REASON,
+                    state.owner_user_id,
                 )
                 return
 
