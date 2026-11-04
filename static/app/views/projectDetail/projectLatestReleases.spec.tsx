@@ -46,7 +46,7 @@ describe('ProjectDetail > ProjectLatestReleases', () => {
 
     expect(await screen.findByText('1.0.0')).toBeInTheDocument();
     expect(screen.getByText('1.0.1')).toBeInTheDocument();
-    expect(screen.getAllByText('Mar 23, 2020 1:02 AM')).toHaveLength(2);
+    expect(screen.getAllByText('Mar 23, 2020 1:02 AM UTC')).toHaveLength(2);
 
     expect(endpointMock).toHaveBeenCalledTimes(1);
     expect(endpointMock).toHaveBeenCalledWith(

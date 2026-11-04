@@ -114,7 +114,7 @@ describe('ProjectSourceMaps', () => {
         await screen.findByText(textWithMarkupMatcher('(Dist: android, iOS)'))
       ).toBeInTheDocument();
       // Date Uploaded
-      expect(screen.getByText('Mar 8, 2023 9:53 AM')).toBeInTheDocument();
+      expect(screen.getByText('Mar 8, 2023 9:53 AM UTC')).toBeInTheDocument();
       expect(screen.getByText('(39 files)')).toBeInTheDocument();
 
       // Delete button

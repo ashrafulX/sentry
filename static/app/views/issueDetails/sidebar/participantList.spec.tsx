@@ -62,9 +62,9 @@ describe('ParticipantList', () => {
     render(<ParticipantList users={users} teams={teams} />);
     await userEvent.click(screen.getByText('JD'), {skipHover: true});
     expect(await screen.findByText('John Doe')).toBeInTheDocument();
-    expect(await screen.findByText('Jan 1, 2024 12:00 AM')).toBeInTheDocument();
+    expect(await screen.findByText('Jan 1, 2024 12:00 AM UTC')).toBeInTheDocument();
     expect(await screen.findByText('Bob Alice')).toBeInTheDocument();
-    expect(await screen.findByText('Jan 2, 2024 12:00 AM')).toBeInTheDocument();
+    expect(await screen.findByText('Jan 2, 2024 12:00 AM UTC')).toBeInTheDocument();
     // Still display teams/users without timestamps
     expect(await screen.findByText('#team-1')).toBeInTheDocument();
     expect(await screen.findByText('#team-2')).toBeInTheDocument();

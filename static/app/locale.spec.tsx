@@ -8,7 +8,6 @@ import {getRelativeDate, useRelativeTimeFormatter} from '@sentry/scraps/relative
 import {
   DEFAULT_LOCALE_DATA,
   getLocaleSnapshot,
-  pgettext,
   setLocale,
   t,
   tct,
@@ -107,7 +106,7 @@ describe('locale.gettextComponentTemplate', () => {
   });
 });
 
-describe('locale.pgettext', () => {
+describe('locale snapshot contextual translations', () => {
   afterEach(() => {
     setLocale(DEFAULT_LOCALE_DATA);
   });
@@ -119,7 +118,10 @@ describe('locale.pgettext', () => {
       'abbreviated minutes\u0004m': ['м'],
     });
 
-    const result = [t('m'), pgettext('abbreviated minutes', 'm')];
+    const result = [
+      t('m'),
+      getLocaleSnapshot().messages.pgettext('abbreviated minutes', 'm'),
+    ];
 
     expect(result).toEqual(['млн', 'м']);
   });
@@ -127,7 +129,7 @@ describe('locale.pgettext', () => {
   it('should fall back to the msgid when the context has no translation', () => {
     setLocale({...DEFAULT_LOCALE_DATA, m: ['млн']});
 
-    const result = pgettext('abbreviated minutes', 'm');
+    const result = getLocaleSnapshot().messages.pgettext('abbreviated minutes', 'm');
 
     expect(result).toBe('m');
   });
