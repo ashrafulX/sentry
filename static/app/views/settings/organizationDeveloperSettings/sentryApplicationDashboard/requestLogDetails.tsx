@@ -1,7 +1,7 @@
 import {Fragment, useCallback} from 'react';
 
-import {CodeBlock} from '@sentry/scraps/codeBlock';
 import {CopyToClipboardButton} from '@sentry/scraps/clipboard';
+import {CodeBlock} from '@sentry/scraps/codeBlock';
 import {DateTime} from '@sentry/scraps/dateTime';
 import {DrawerBody, DrawerHeader, useDrawer} from '@sentry/scraps/drawer';
 import {Flex, Stack} from '@sentry/scraps/layout';
