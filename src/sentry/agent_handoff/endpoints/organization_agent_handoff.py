@@ -1,6 +1,7 @@
 import logging
 from typing import TypedDict
 
+from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from drf_spectacular.utils import extend_schema
@@ -121,7 +122,7 @@ class OrganizationAgentHandoffEndpoint(ControlSiloOrganizationEndpoint):
             scope_list=HANDOFF_SCOPES,
         )
         # Fragments are withheld from HTTP requests, including access logs and previews.
-        guide_url = f"{absolute_uri('/onboard/')}#{issued.code}"
+        guide_url = f"{absolute_uri(reverse('sentry-agent-handoff'))}#{issued.code}"
         data: AgentHandoffResponse = {
             "prompt": f"Follow these instructions to get started with Sentry:\n{guide_url}",
             "guideUrl": guide_url,
