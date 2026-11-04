@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from sentry.seer.entrypoints.slack.out_of_credits import (
     OUT_OF_CREDITS_MESSAGE,
     REQUEST_CREDITS_LINK_TEXT,
@@ -12,30 +14,31 @@ from sentry.seer.entrypoints.slack.out_of_credits import (
 )
 from sentry.testutils.cases import TestCase
 
+# org:billing is a getsentry scope, so stub member scopes rather than rely on its roles.
+GET_SCOPES = "sentry.seer.entrypoints.slack.out_of_credits.OrganizationMember.get_scopes"
+BILLING_SCOPES = frozenset({"org:read", "org:billing"})
+NON_BILLING_SCOPES = frozenset({"org:read", "org:write"})
+
 
 class SeerCreditsLinkTest(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.organization = self.create_organization(owner=self.user)
 
-    def _member(self, role: str) -> int:
-        user = self.create_user()
-        self.create_member(organization=self.organization, user=user, role=role)
-        return user.id
-
-    def test_owner_and_billing_can_manage_billing(self) -> None:
+    @patch(GET_SCOPES, return_value=BILLING_SCOPES)
+    def test_billing_scope_can_manage_billing(self, _: object) -> None:
         assert can_manage_billing(self.organization, self.user.id)
-        assert can_manage_billing(self.organization, self._member("billing"))
 
-    def test_other_roles_cannot_manage_billing(self) -> None:
-        for role in ("member", "admin", "manager"):
-            assert not can_manage_billing(self.organization, self._member(role))
+    @patch(GET_SCOPES, return_value=NON_BILLING_SCOPES)
+    def test_without_billing_scope_cannot_manage_billing(self, _: object) -> None:
+        assert not can_manage_billing(self.organization, self.user.id)
 
     def test_unknown_user_cannot_manage_billing(self) -> None:
         assert not can_manage_billing(self.organization, None)
         assert not can_manage_billing(self.organization, self.create_user().id)
 
-    def test_top_up_link_for_billing_member(self) -> None:
+    @patch(GET_SCOPES, return_value=BILLING_SCOPES)
+    def test_top_up_link_for_billing_member(self, _: object) -> None:
         link = get_seer_credits_link(self.organization, self.user.id)
         assert link.can_top_up
         assert link.text == TOP_UP_LINK_TEXT
@@ -43,8 +46,9 @@ class SeerCreditsLinkTest(TestCase):
         assert f"/settings/{self.organization.slug}/billing/overview/" in link.url
         assert "referrer=slack-seer-credits" in link.url
 
-    def test_request_link_for_other_member(self) -> None:
-        link = get_seer_credits_link(self.organization, self._member("member"))
+    @patch(GET_SCOPES, return_value=NON_BILLING_SCOPES)
+    def test_request_link_for_other_member(self, _: object) -> None:
+        link = get_seer_credits_link(self.organization, self.user.id)
         assert not link.can_top_up
         assert link.text == REQUEST_CREDITS_LINK_TEXT
         assert link.prompt == REQUEST_CREDITS_PROMPT
@@ -53,7 +57,8 @@ class SeerCreditsLinkTest(TestCase):
     def test_request_link_without_user(self) -> None:
         assert not get_seer_credits_link(self.organization, None).can_top_up
 
-    def test_format_mrkdwn(self) -> None:
+    @patch(GET_SCOPES, return_value=BILLING_SCOPES)
+    def test_format_mrkdwn(self, _: object) -> None:
         link = get_seer_credits_link(self.organization, self.user.id)
         assert format_out_of_credits_mrkdwn(link) == (
             f"{OUT_OF_CREDITS_MESSAGE} {TOP_UP_PROMPT} <{link.url}|{TOP_UP_LINK_TEXT}>"
