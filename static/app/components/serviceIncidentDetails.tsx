@@ -8,6 +8,7 @@ import {IconWarning} from '@sentry/icons/warning';
 import sortBy from 'lodash/sortBy';
 import startCase from 'lodash/startCase';
 
+import {DateTime} from '@sentry/scraps/dateTime';
 import {Container, Flex, Grid, Stack} from '@sentry/scraps/layout';
 import {ExternalLink} from '@sentry/scraps/link';
 import {sanitizedMarked} from '@sentry/scraps/markdown';
@@ -15,7 +16,6 @@ import {StatusIndicator} from '@sentry/scraps/statusIndicator';
 import {Prose, Text} from '@sentry/scraps/text';
 import {Tooltip} from '@sentry/scraps/tooltip';
 
-import {DateTime} from 'sentry/components/dateTime';
 import {TimeSince} from 'sentry/components/timeSince';
 import {t, tct} from 'sentry/locale';
 import type {

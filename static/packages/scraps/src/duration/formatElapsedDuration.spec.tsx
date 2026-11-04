@@ -1,4 +1,4 @@
-import {formatElapsedDuration} from 'sentry/utils/duration/formatElapsedDuration';
+import {formatElapsedDuration} from '@sentry/scraps/duration';
 
 describe('formatElapsedDuration', () => {
   it.each([

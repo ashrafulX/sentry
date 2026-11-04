@@ -1,9 +1,9 @@
 import styled from '@emotion/styled';
 
 import {Alert} from '@sentry/scraps/alert';
+import {DateTime} from '@sentry/scraps/dateTime';
 import type {TableColumnConfig} from '@sentry/scraps/table';
 
-import {DateTime} from 'sentry/components/dateTime';
 import type {ReplayBulkDeleteAuditLog} from 'sentry/components/replays/bulkDelete/types';
 import {SimpleTable} from 'sentry/components/tables/simpleTable';
 import {t} from 'sentry/locale';
