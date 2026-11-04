@@ -14,6 +14,7 @@ from sentry.integrations.services.integration.model import RpcIntegration
 from sentry.integrations.services.integration.service import integration_service
 from sentry.models.organization import Organization
 from sentry.notifications.platform.slack.provider import SlackRenderable
+from sentry.seer.credits import SeerOperation, can_run_seer_operation
 from sentry.seer.entrypoints.metrics import (
     SlackEntrypointEventLifecycleMetric,
     SlackEntrypointInteractionType,
@@ -42,6 +43,11 @@ from sentry.seer.entrypoints.slack.metrics import (
     ProcessMentionHaltReason,
     ProcessReactionFailureReason,
     ProcessReactionHaltReason,
+)
+from sentry.seer.entrypoints.slack.out_of_credits import (
+    OUT_OF_CREDITS_NOT_STARTED_MESSAGE,
+    format_out_of_credits_mrkdwn,
+    get_seer_credits_link,
 )
 from sentry.seer.entrypoints.types import SeerEntrypointKey
 from sentry.tasks.base import instrumented_task
@@ -153,6 +159,24 @@ def process_mention_for_slack(
                 thread_ts=thread_ts if thread_ts else "",
                 org_name=organization.name,
             )
+            entrypoint.install.set_thread_status(
+                channel_id=channel_id,
+                thread_ts=thread_ts or ts,
+                status="",
+            )
+            return
+
+        # Check credits before fetching context or starting a run, so an org that can't pay
+        # gets an answer right away instead of a run that fails partway through.
+        if not can_run_seer_operation(organization, SeerOperation.AGENT_CHAT_MESSAGE):
+            lifecycle.record_halt(ProcessMentionHaltReason.OUT_OF_SEER_CREDITS)
+            _send_out_of_credits_message(
+                entrypoint=entrypoint,
+                organization=organization,
+                user_id=user.id,
+                thread_ts=thread_ts or ts,
+            )
+            # The webhook set "is thinking..." before queueing this task; clear it.
             entrypoint.install.set_thread_status(
                 channel_id=channel_id,
                 thread_ts=thread_ts or ts,
@@ -392,6 +416,31 @@ def _resolve_linked_messages(
         unresolved_channel_ids=list(unresolved),
         private_channel_ids=list(private_channels),
     )
+
+
+def _send_out_of_credits_message(
+    *,
+    entrypoint: SlackAgentEntrypoint,
+    organization: Organization,
+    user_id: int,
+    thread_ts: str,
+) -> None:
+    """Tell the user the org is out of Seer credits, with a link to add or request more.
+
+    Ephemeral, because the link depends on whether this user can manage billing.
+    """
+    message = format_out_of_credits_mrkdwn(
+        get_seer_credits_link(organization, user_id), message=OUT_OF_CREDITS_NOT_STARTED_MESSAGE
+    )
+    try:
+        entrypoint.install.send_threaded_ephemeral_message(
+            slack_user_id=entrypoint.slack_user_id,
+            channel_id=entrypoint.channel_id,
+            renderable=SlackRenderable(blocks=[MarkdownBlock(text=message)], text=message),
+            thread_ts=thread_ts,
+        )
+    except Exception as e:
+        _logger.warning("seer.slack.process_mention.send_out_of_credits_failed", exc_info=e)
 
 
 def _send_inaccessible_links_prompt(
