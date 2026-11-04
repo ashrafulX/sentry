@@ -3,6 +3,7 @@ import {css, useTheme} from '@emotion/react';
 import styled from '@emotion/styled';
 
 import {Container, Flex, Grid, Stack} from '@sentry/scraps/layout';
+import {getRelativeDate} from '@sentry/scraps/relativeTime';
 
 import {ErrorBoundary} from 'sentry/components/errorBoundary';
 import {EnvironmentPageFilter} from 'sentry/components/pageFilters/environment/environmentPageFilter';
@@ -11,7 +12,6 @@ import {
   TimeRangeSelector,
   TimeRangeSelectTrigger,
 } from 'sentry/components/timeRangeSelector';
-import {getRelativeDate} from 'sentry/components/timeSince';
 import {TourElement} from 'sentry/components/tours/components';
 import {t, tct} from 'sentry/locale';
 import type {Event} from 'sentry/types/event';

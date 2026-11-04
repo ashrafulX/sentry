@@ -4,6 +4,8 @@ import type {Query} from 'history';
 import memoize from 'lodash/memoize';
 import partition from 'lodash/partition';
 
+import {getFormat, formatDateTime} from '@sentry/scraps/dateTime';
+
 import {addErrorMessage} from 'sentry/actionCreators/indicator';
 import type {Client} from 'sentry/api';
 import {markLine as createMarkLine} from 'sentry/components/charts/components/markLine';
@@ -14,7 +16,7 @@ import type {Series} from 'sentry/types/echarts';
 import type {Organization} from 'sentry/types/organization';
 import {escape} from 'sentry/utils';
 import {getApiUrl} from 'sentry/utils/api/getApiUrl';
-import {getFormat, getFormattedDate, getUtcDateString} from 'sentry/utils/dates';
+import {getUtcDateString} from 'sentry/utils/dates';
 import {parseLinkHeader} from 'sentry/utils/parseLinkHeader';
 import {useApi} from 'sentry/utils/useApi';
 import {useLocation} from 'sentry/utils/useLocation';
@@ -141,11 +143,10 @@ function buildReleaseSeries({
           if (!data) {
             return '';
           }
-          const time = getFormattedDate(
-            data.value,
-            getFormat({timeZone: true, year: true}),
-            {local: !utc}
-          );
+          const time = formatDateTime(data.value, {
+            format: getFormat({timeZone: true, year: true}),
+            utc: !!utc,
+          });
           const version = escape(formatVersion(data.name, true));
           return [
             '<div class="tooltip-series">',

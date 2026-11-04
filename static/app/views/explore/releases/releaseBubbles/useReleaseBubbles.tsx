@@ -10,6 +10,8 @@ import type {
 } from 'echarts';
 import moment from 'moment-timezone';
 
+import {getFormat} from '@sentry/scraps/dateTime';
+
 import {closeModal} from 'sentry/actionCreators/modal';
 import {isChartHovered} from 'sentry/components/charts/utils';
 import type {RawFlag} from 'sentry/components/featureFlags/utils';
@@ -22,7 +24,6 @@ import type {
 } from 'sentry/types/echarts';
 import type {ReleaseMetaBasic} from 'sentry/types/release';
 import {trackAnalytics} from 'sentry/utils/analytics';
-import {getFormat} from 'sentry/utils/dates';
 import {defined} from 'sentry/utils/defined';
 import {useLocation} from 'sentry/utils/useLocation';
 import {useNavigate} from 'sentry/utils/useNavigate';
