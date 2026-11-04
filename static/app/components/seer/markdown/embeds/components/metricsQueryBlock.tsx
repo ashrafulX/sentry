@@ -7,7 +7,10 @@ import {
   seriesFromTimeSeries,
 } from 'sentry/components/seer/markdown/embeds/components/queryEmbed/queryEmbedChart';
 import {QUERY_EMBED_ROW_LIMIT} from 'sentry/components/seer/markdown/embeds/components/queryEmbed/queryEmbedConstants';
-import {useQueryEmbedEventsTable} from 'sentry/components/seer/markdown/embeds/components/queryEmbed/queryEmbedQueries';
+import {
+  useHasUnsupportedQueryTransformations,
+  useQueryEmbedEventsTable,
+} from 'sentry/components/seer/markdown/embeds/components/queryEmbed/queryEmbedQueries';
 import {
   eventColumns,
   eventRowKey,
@@ -15,6 +18,7 @@ import {
 } from 'sentry/components/seer/markdown/embeds/components/queryEmbed/queryEmbedTable';
 import {toPageFilters} from 'sentry/components/seer/markdown/embeds/components/queryEmbedParams';
 import {t} from 'sentry/locale';
+import type {Sort} from 'sentry/utils/discover/fields';
 import {DiscoverDatasets} from 'sentry/utils/discover/types';
 import {useFetchEventsTimeSeries} from 'sentry/utils/timeSeries/useFetchEventsTimeSeries';
 import {useOrganization} from 'sentry/utils/useOrganization';
@@ -36,11 +40,16 @@ function hasNoGroupBy(data: MetricsQueryData): boolean {
 function MetricsQueryChart({
   data,
   hasTable,
+  sort,
 }: {
   data: MetricsQueryData;
   hasTable: boolean;
+  sort: Sort | undefined;
 }) {
   const groupBy = (data.groupBy ?? []).filter(Boolean);
+  const unsupportedTransformations = useHasUnsupportedQueryTransformations(
+    data.transformations
+  );
 
   // The metric's identity rides in the y-axis arguments, so the search string
   // stays the user's own predicate — unlike the samples table, which has no
@@ -48,12 +57,14 @@ function MetricsQueryChart({
   const query = useFetchEventsTimeSeries(
     DiscoverDatasets.TRACEMETRICS,
     {
+      enabled: !unsupportedTransformations,
       yAxis: resolveMetricYAxes(data),
       transformations: data.transformations,
       interval: data.interval,
       query: data.query,
       groupBy: groupBy.length > 0 ? groupBy : undefined,
       topEvents: groupBy.length > 0 ? QUERY_EMBED_ROW_LIMIT : undefined,
+      sort: groupBy.length > 0 ? sort : undefined,
       pageFilters: toPageFilters(data),
     },
     'seer-metrics-query-embed'
@@ -70,6 +81,7 @@ function MetricsQueryChart({
       series={seriesFromTimeSeries(timeSeries, data)}
       title={data.title ?? data.name}
       unit={chartUnitFromTimeSeries(timeSeries)}
+      unsupportedTransformations={unsupportedTransformations}
     />
   );
 }
@@ -107,7 +119,7 @@ export default function MetricsQueryBlock({data}: {data: MetricsQueryData}) {
       testId={`seer-metrics-query-${data.mode}-embed`}
       title={getMetricsQueryTitle(data)}
     >
-      <MetricsQueryChart data={data} hasTable={!isChartOnly} />
+      <MetricsQueryChart data={data} hasTable={!isChartOnly} sort={eventView.sorts[0]} />
     </QueryEmbedCard>
   );
 }

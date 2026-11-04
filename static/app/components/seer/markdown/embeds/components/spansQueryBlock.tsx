@@ -10,6 +10,7 @@ import {
 } from 'sentry/components/seer/markdown/embeds/components/queryEmbed/queryEmbedChart';
 import {QUERY_EMBED_ROW_LIMIT} from 'sentry/components/seer/markdown/embeds/components/queryEmbed/queryEmbedConstants';
 import {
+  useHasUnsupportedQueryTransformations,
   useQueryEmbedEventsStats,
   useQueryEmbedEventsTable,
 } from 'sentry/components/seer/markdown/embeds/components/queryEmbed/queryEmbedQueries';
@@ -45,6 +46,9 @@ function SpansQueryChart({
   hasTable: boolean;
 }) {
   const yAxisFields = resolveChartYAxes(data);
+  const unsupportedTransformations = useHasUnsupportedQueryTransformations(
+    data.transformations
+  );
   const hasTransformations =
     data.transformations?.some(pipeline => pipeline.length) ?? false;
   const query = useQueryEmbedEventsStats(
@@ -55,7 +59,7 @@ function SpansQueryChart({
   const transformedQuery = useFetchEventsTimeSeries(
     DiscoverDatasets.SPANS,
     {
-      enabled: hasTransformations,
+      enabled: hasTransformations && !unsupportedTransformations,
       yAxis: yAxisFields,
       transformations: data.transformations,
       interval: data.interval,
@@ -91,6 +95,7 @@ function SpansQueryChart({
           ? chartUnitFromTimeSeries(timeSeries)
           : toChartUnit(aggregateOutputType(yAxisFields[0]))
       }
+      unsupportedTransformations={unsupportedTransformations}
     />
   );
 }

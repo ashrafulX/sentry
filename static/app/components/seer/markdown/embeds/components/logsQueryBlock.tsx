@@ -7,7 +7,10 @@ import {
   seriesFromTimeSeries,
 } from 'sentry/components/seer/markdown/embeds/components/queryEmbed/queryEmbedChart';
 import {QUERY_EMBED_ROW_LIMIT} from 'sentry/components/seer/markdown/embeds/components/queryEmbed/queryEmbedConstants';
-import {useQueryEmbedEventsTable} from 'sentry/components/seer/markdown/embeds/components/queryEmbed/queryEmbedQueries';
+import {
+  useHasUnsupportedQueryTransformations,
+  useQueryEmbedEventsTable,
+} from 'sentry/components/seer/markdown/embeds/components/queryEmbed/queryEmbedQueries';
 import {
   eventColumns,
   eventRowKey,
@@ -91,12 +94,16 @@ function LogsQueryChart({
   sort: Sort | undefined;
 }) {
   const groupBy = getLogsGroupBy(data);
+  const unsupportedTransformations = useHasUnsupportedQueryTransformations(
+    data.transformations
+  );
 
   // Logs charts through `/events-timeseries/` like the Logs page itself, not
   // the `/events-stats/` endpoint the Discover-backed embeds use.
   const query = useFetchEventsTimeSeries(
     DiscoverDatasets.OURLOGS,
     {
+      enabled: !unsupportedTransformations,
       yAxis: resolveLogsYAxes(data),
       transformations: data.transformations,
       interval: data.interval,
@@ -123,6 +130,7 @@ function LogsQueryChart({
       series={seriesFromTimeSeries(timeSeries, data)}
       title={data.title ?? t('Logs over time')}
       unit={chartUnitFromTimeSeries(timeSeries)}
+      unsupportedTransformations={unsupportedTransformations}
     />
   );
 }

@@ -2,6 +2,7 @@ import {skipToken, useQuery} from '@tanstack/react-query';
 import type {Query} from 'history';
 
 import {QUERY_EMBED_ROW_LIMIT} from 'sentry/components/seer/markdown/embeds/components/queryEmbed/queryEmbedConstants';
+import type {EmbedOutput} from 'sentry/components/seer/markdown/embeds/utils';
 import type {EventsStats, MultiSeriesEventsStats} from 'sentry/types/organization';
 import {apiOptions} from 'sentry/utils/api/apiOptions';
 import type {EventsTableData} from 'sentry/utils/discover/discoverQuery';
@@ -10,6 +11,16 @@ import {useOrganization} from 'sentry/utils/useOrganization';
 
 /** Previews are cheap and short-lived; don't refetch one the reader just saw. */
 const STALE_TIME = 30_000;
+
+export function useHasUnsupportedQueryTransformations(
+  transformations: EmbedOutput<'spansQuery'>['transformations']
+) {
+  const organization = useOrganization();
+  return (
+    Boolean(transformations?.some(pipeline => pipeline.length)) &&
+    !organization.features.includes('explore-interpolation-and-smoothing')
+  );
+}
 
 /**
  * The row preview behind `/organizations/$org/events/`. Every Discover-backed
