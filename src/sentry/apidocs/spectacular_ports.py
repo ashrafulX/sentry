@@ -35,7 +35,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from enum import Enum
 from types import UnionType
-from typing import Any, Literal, Union, is_typeddict
+from typing import Annotated, Any, Literal, NotRequired, ReadOnly, Required, Union, is_typeddict
 from typing import get_type_hints as _get_type_hints
 
 import drf_spectacular
@@ -207,7 +207,7 @@ def resolve_type_hint(hint: TypeHint) -> TypeHint:
                     if k not in excluded_fields
                 },
                 description=inspect.cleandoc(hint.__doc__ or ""),
-                required=[h for h in hint.__required_keys__ if h not in excluded_fields],
+                required=[k for k in _typed_dict_required_keys(hint) if k not in excluded_fields],
             )
         finally:
             _typed_dicts_in_progress.pop()
@@ -250,6 +250,36 @@ def _resolve_at(hint: Any, *keys: str) -> Any:
     """Resolve a hint nested at `keys` below its parent, for the build's omission check."""
     with descended(*keys):
         return resolve_type_hint(hint)
+
+
+def _typed_dict_required_keys(hint: Any) -> list[str]:
+    """The keys a TypedDict requires.
+
+    `__required_keys__` alone is wrong in modules with `from __future__ import annotations`:
+    the class is built from strings, so it never sees `NotRequired[...]` or `Required[...]`
+    and every key falls back to the class's `total`
+    (https://github.com/python/cpython/issues/97727). The resolved hints still carry
+    them, so they decide; keys without one keep `__required_keys__`, which gets `total`
+    and inheritance right.
+    """
+    required = []
+    for key, annotation in get_type_hints(hint, include_extras=True).items():
+        qualifiers = _typed_dict_qualifiers(annotation)
+        if NotRequired in qualifiers:
+            continue
+        if Required in qualifiers or key in hint.__required_keys__:
+            required.append(key)
+    return required
+
+
+def _typed_dict_qualifiers(annotation: Any) -> set[Any]:
+    """The Required, NotRequired and ReadOnly wrapped around a TypedDict key's type."""
+    qualifiers = set()
+    while (origin := typing.get_origin(annotation)) in (Annotated, Required, NotRequired, ReadOnly):
+        if origin is not Annotated:
+            qualifiers.add(origin)
+        annotation = typing.get_args(annotation)[0]
+    return qualifiers
 
 
 def _typed_dict_exclusions(hint: Any, excluded_fields: Any) -> list[str]:
