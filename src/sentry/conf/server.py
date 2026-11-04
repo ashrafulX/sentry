@@ -1143,6 +1143,10 @@ TASKWORKER_REGION_SCHEDULES: ScheduleConfigMap = {
         "task": "alerts:sentry.snuba.tasks.subscription_checker",
         "schedule": crontab("*/20", "*", "*", "*", "*"),
     },
+    "snuba-broken-subscription-recheck": {
+        "task": "alerts:sentry.snuba.tasks.schedule_broken_subscription_rechecks",
+        "schedule": timedelta(minutes=1),
+    },
     "uptime-subscription-checker": {
         "task": "uptime:sentry.uptime.tasks.subscription_checker",
         "schedule": crontab("*/10", "*", "*", "*", "*"),
