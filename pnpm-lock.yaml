@@ -538,8 +538,8 @@ importers:
         specifier: 3.10.1
         version: 3.10.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@react-types/shared':
-        specifier: 3.36.0
-        version: 3.36.0(react@19.3.0)
+        specifier: 3.37.0
+        version: 3.37.0(react@19.3.0)
       '@rspack/core':
         specifier: 2.2.8
         version: 2.2.8(@swc/helpers@0.5.23)
@@ -1225,8 +1225,8 @@ importers:
         specifier: 3.10.1
         version: 3.10.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@react-types/shared':
-        specifier: 3.36.0
-        version: 3.36.0(react@19.3.0)
+        specifier: 3.37.0
+        version: 3.37.0(react@19.3.0)
       '@sentry/icons':
         specifier: workspace:*
         version: link:../icons
@@ -3823,6 +3823,11 @@ packages:
 
   '@react-types/shared@3.36.0':
     resolution: {integrity: sha512-DkP/H0C2YjjS7gZWKNqOmU8a16qHPjQNdzMwmTq9SzplM6Iw0kVMTZ0OIoe6FOgGqa+FwMsE2QbPjh/n3g/jXQ==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0-rc.1
+
+  '@react-types/shared@3.37.0':
+    resolution: {integrity: sha512-VNlZuifu4tHdxWPfHvoMfKsHA9kVTCGkduv5vKVTdinm8wHFJNhyVB5RzIMiRFj0q3RKoCbP68u2zaoBSiFueg==}
     peerDependencies:
       react: ^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0-rc.1
 
@@ -9642,7 +9647,7 @@ snapshots:
     dependencies:
       '@babel/compat-data': 7.29.7
       '@babel/helper-validator-option': 7.29.7
-      browserslist: 4.29.0
+      browserslist: 4.29.5
       lru-cache: 5.1.1
       semver: 6.3.1
 
@@ -11369,7 +11374,7 @@ snapshots:
 
   '@react-aria/interactions@3.28.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
-      '@react-types/shared': 3.36.0(react@19.3.0)
+      '@react-types/shared': 3.37.0(react@19.3.0)
       '@swc/helpers': 0.5.23
       react: 19.3.0
       react-aria: 3.50.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -11412,7 +11417,7 @@ snapshots:
 
   '@react-aria/radio@3.13.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
-      '@react-types/shared': 3.36.0(react@19.3.0)
+      '@react-types/shared': 3.37.0(react@19.3.0)
       '@swc/helpers': 0.5.23
       react: 19.3.0
       react-aria: 3.50.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -11434,7 +11439,7 @@ snapshots:
 
   '@react-aria/slider@3.9.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
-      '@react-types/shared': 3.36.0(react@19.3.0)
+      '@react-types/shared': 3.37.0(react@19.3.0)
       '@swc/helpers': 0.5.23
       react: 19.3.0
       react-aria: 3.50.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -11442,7 +11447,7 @@ snapshots:
 
   '@react-aria/tabs@3.12.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
-      '@react-types/shared': 3.36.0(react@19.3.0)
+      '@react-types/shared': 3.37.0(react@19.3.0)
       '@swc/helpers': 0.5.23
       react: 19.3.0
       react-aria: 3.50.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -11548,6 +11553,10 @@ snapshots:
       react-stately: 3.48.0(react@19.3.0)
 
   '@react-types/shared@3.36.0(react@19.3.0)':
+    dependencies:
+      react: 19.3.0
+
+  '@react-types/shared@3.37.0(react@19.3.0)':
     dependencies:
       react: 19.3.0
 
