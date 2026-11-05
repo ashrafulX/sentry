@@ -49,6 +49,7 @@ from sentry.seer.agent.client_utils import (
 from sentry.seer.agent.monitoring_providers import get_monitoring_provider_connections
 from sentry.seer.models.run import SeerRun, SeerRunMirrorStatus, SeerRunType
 from sentry.seer.signed_seer_api import SearchAgentStartRequest, make_search_agent_start_request
+from sentry.seer.workflows.workflow import create_agent_service_account
 from sentry.sentry_apps.services.app.service import app_service
 from sentry.service_accounts.services.service_account import service_account_service
 from sentry.types.cell import get_local_cell
@@ -241,6 +242,13 @@ def process_disable_auth_provider(
     # Deprecated
     auth_service.disable_provider(provider_id=object_identifier)
     AuthProviderReplica.objects.filter(auth_provider_id=object_identifier).delete()
+
+
+@receiver(process_cell_outbox, sender=OutboxCategory.SEER_WORKFLOW_SERVICE_ACCOUNT_CREATE)
+def handle_seer_workflow_service_account_create(
+    object_identifier: int, payload: Any, **kwds: Any
+) -> None:
+    create_agent_service_account(object_identifier, payload)
 
 
 @receiver(process_cell_outbox, sender=OutboxCategory.SEER_RUN_CREATE)

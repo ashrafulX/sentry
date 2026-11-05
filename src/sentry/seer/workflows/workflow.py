@@ -13,6 +13,9 @@ from django.db.models import Count, Q, QuerySet
 from pydantic import BaseModel
 
 from sentry.constants import ALL_ACCESS_PROJECTS, ObjectStatus
+from sentry.hybridcloud.models.outbox import CellOutbox, OutboxFlushError, outbox_context
+from sentry.hybridcloud.outbox.category import OutboxCategory, OutboxScope
+from sentry.hybridcloud.rpc.service import RpcValidationException
 from sentry.models.organization import Organization
 from sentry.models.project import Project
 from sentry.seer.models.workflow import (
@@ -30,7 +33,12 @@ from sentry.seer.models.workflow import (
     WorkflowRunSnapshot,
 )
 from sentry.seer.workflows.runs import SeerWorkflowRunLifecycle
-from sentry.service_accounts.models import MAX_NAME_LENGTH, ServiceAccountReplica
+from sentry.service_accounts.models import (
+    MAX_NAME_LENGTH,
+    InvalidScopeError,
+    ServiceAccountReplica,
+    validate_grantable_scopes,
+)
 from sentry.service_accounts.services.service_account import (
     RpcServiceAccount,
     service_account_service,
@@ -119,40 +127,6 @@ class SeerWorkflow:
 
     @classmethod
     @contextmanager
-    def _create_agent_service_account(
-        cls,
-        organization_id: int,
-        agent: SeerAgentAccess,
-        *,
-        automation_name: str | None,
-        created_by_id: int | None,
-    ) -> Iterator[RpcServiceAccount]:
-        """Create the agent's service account, deleting it again if the block raises."""
-        cls._validate_agent_project_ids(organization_id, agent)
-        # TODO(telkins): Suffix the name with the config ID instead. The account is created
-        # before the config exists, so this needs a rename after linking.
-        suffix = uuid4().hex[:8]
-        prefix = f"Seer: {automation_name}" if automation_name else "Seer automation"
-        account = service_account_service.create_service_account(
-            organization_id=organization_id,
-            name=f"{prefix[: MAX_NAME_LENGTH - len(suffix) - 1]} {suffix}",
-            scope_list=list(agent.scopes),
-            project_ids=[] if agent.all_projects else list(agent.project_ids),
-            all_projects=agent.all_projects,
-            created_by_id=created_by_id,
-        )
-        try:
-            yield account
-        except BaseException:
-            # TODO(telkins): Look for a transactional way to create the account and config
-            # together instead of deleting the account when the config fails.
-            service_account_service.delete_service_account(
-                organization_id=organization_id, service_account_id=account.id
-            )
-            raise
-
-    @classmethod
-    @contextmanager
     def _create_config(
         cls,
         *,
@@ -165,40 +139,49 @@ class SeerWorkflow:
         extras: SeerWorkflowConfigExtras | None = None,
     ) -> Iterator[SeerWorkflowConfig]:
         """
-        Create a config and its agent's service account within the org's automation limit.
-        Writes in the block share the config's transaction, and the account is deleted if
-        the block raises.
-        """
-        extras = extras or SeerWorkflowConfigExtras()
-        with (
-            cls._create_agent_service_account(
-                organization_id,
-                agent,
-                automation_name=extras.name,
-                created_by_id=extras.created_by,
-            ) as account,
-            transaction.atomic(database),
-        ):
-            existing = (
-                SeerWorkflowConfig.objects.using(database)
-                .filter(
-                    organization_id=organization_id,
-                    strategy__in=SEER_CONFIGURABLE_WORKFLOW_STRATEGIES,
-                )
-                .count()
-            )
-            if existing >= MAX_WORKFLOW_CONFIGS_PER_ORG:
-                raise WorkflowUpdateError(
-                    f"Organizations can have at most {MAX_WORKFLOW_CONFIGS_PER_ORG} automations"
-                )
+        Create a config within the org's automation limit, with an outbox that creates its
+        agent's service account in control. Writes in the block share the config's
+        transaction, so a config is never committed without the outbox that links its
+        account.
 
-            yield SeerWorkflowConfig.objects.using(database).create(
-                organization_id=organization_id,
-                strategy=strategy,
-                enabled=enabled,
-                filters=filters.dict(),
-                extras=extras.dict(exclude_none=True),
-                service_account_id=account.id,
+        The outbox drains when the transaction commits. If that fails, the config is kept
+        without an account and the outbox retries in the background.
+        """
+        cls._validate_agent_project_ids(organization_id, agent)
+        try:
+            validate_grantable_scopes(agent.scopes)
+        except InvalidScopeError as e:
+            raise WorkflowUpdateError(" ".join(e.messages)) from e
+
+        extras = extras or SeerWorkflowConfigExtras()
+        try:
+            with outbox_context(transaction.atomic(database), flush=True):
+                existing = (
+                    SeerWorkflowConfig.objects.using(database)
+                    .filter(
+                        organization_id=organization_id,
+                        strategy__in=SEER_CONFIGURABLE_WORKFLOW_STRATEGIES,
+                    )
+                    .count()
+                )
+                if existing >= MAX_WORKFLOW_CONFIGS_PER_ORG:
+                    raise WorkflowUpdateError(
+                        f"Organizations can have at most {MAX_WORKFLOW_CONFIGS_PER_ORG} automations"
+                    )
+
+                config = SeerWorkflowConfig.objects.using(database).create(
+                    organization_id=organization_id,
+                    strategy=strategy,
+                    enabled=enabled,
+                    filters=filters.dict(),
+                    extras=extras.dict(exclude_none=True),
+                )
+                agent_service_account_outbox(config, agent, extras).save()
+                yield config
+        except OutboxFlushError:
+            logger.exception(
+                "seer.workflow.agent_service_account.flush_failed",
+                extra={"organization_id": organization_id},
             )
 
     @classmethod
@@ -559,3 +542,58 @@ def _validate_project_ids(organization_id: int, project_ids: set[int]) -> None:
     )
     if project_ids != valid_project_ids:
         raise WorkflowUpdateError("Selected projects must exist in the workflow's organization")
+
+
+def agent_service_account_outbox(
+    config: SeerWorkflowConfig, agent: SeerAgentAccess, extras: SeerWorkflowConfigExtras
+) -> CellOutbox:
+    """The outbox that creates ``config``'s agent account; save it in the config's transaction."""
+    suffix = f"#{config.id}"
+    prefix = f"Seer: {extras.name}" if extras.name else "Seer automation"
+    return CellOutbox(
+        shard_scope=OutboxScope.SEER_WORKFLOW_SCOPE,
+        shard_identifier=config.id,
+        category=OutboxCategory.SEER_WORKFLOW_SERVICE_ACCOUNT_CREATE,
+        object_identifier=config.id,
+        payload={
+            "name": f"{prefix[: MAX_NAME_LENGTH - len(suffix) - 1]} {suffix}",
+            "scope_list": list(agent.scopes),
+            "project_ids": [] if agent.all_projects else list(agent.project_ids),
+            "all_projects": agent.all_projects,
+            "created_by_id": extras.created_by,
+            # Stable across redeliveries of this outbox, so control returns the account
+            # an earlier attempt created instead of making a second one.
+            "idempotency_key": uuid4().hex,
+        },
+    )
+
+
+def create_agent_service_account(config_id: int, payload: Mapping[str, Any]) -> None:
+    """Create a config's agent account in control and link it. Safe to retry."""
+    config = SeerWorkflowConfig.objects.filter(id=config_id).first()
+    if config is None or config.service_account_id is not None:
+        return
+
+    try:
+        account = service_account_service.create_service_account(
+            organization_id=config.organization_id,
+            name=payload["name"],
+            scope_list=payload["scope_list"],
+            project_ids=payload["project_ids"],
+            all_projects=payload["all_projects"],
+            created_by_id=payload["created_by_id"],
+            idempotency_key=payload["idempotency_key"],
+        )
+    except RpcValidationException:
+        # Retrying can't fix a rejected grant, and raising would stall the shard. The config
+        # stays without an account, which runs already report as unavailable.
+        logger.exception(
+            "seer.workflow.agent_service_account.rejected",
+            extra={"organization_id": config.organization_id, "config_id": config_id},
+        )
+        return
+
+    # Linking isn't a configuration change, so it doesn't bump the version.
+    SeerWorkflowConfig.objects.filter(id=config_id, service_account_id__isnull=True).update(
+        service_account_id=account.id
+    )
