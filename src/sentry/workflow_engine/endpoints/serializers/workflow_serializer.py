@@ -1,7 +1,7 @@
 from collections import defaultdict
 from collections.abc import Mapping, MutableMapping, Sequence
 from datetime import datetime
-from typing import Annotated, Any, TypedDict, cast
+from typing import Annotated, Any, TypedDict
 
 from django.db.models import prefetch_related_objects
 
@@ -15,7 +15,6 @@ from sentry.workflow_engine.models import (
     Workflow,
     WorkflowDataConditionGroup,
 )
-from sentry.workflow_engine.models.workflow import VisibleWorkflowType
 from sentry.workflow_engine.processors.workflow_fire_history import get_last_fired_dates
 
 
@@ -46,7 +45,7 @@ class TriggerSerializerResponse(TypedDict, total=False):
 class WorkflowSerializerResponse(TypedDict):
     id: Annotated[str, ApiDescription("Workflow ID")]
     name: Annotated[str, ApiDescription("Workflow name")]
-    type: Annotated[VisibleWorkflowType, ApiDescription("Workflow type")]
+    type: Annotated[str, ApiDescription("Workflow type")]
     organizationId: str
     createdBy: str | None
     dateCreated: datetime
@@ -125,7 +124,7 @@ class WorkflowSerializer(Serializer[WorkflowSerializerResponse]):
         return {
             "id": str(obj.id),
             "name": str(obj.name),
-            "type": cast(VisibleWorkflowType, obj.type),
+            "type": obj.type,
             "organizationId": str(obj.organization_id),
             "createdBy": str(obj.created_by_id) if obj.created_by_id else None,
             "dateCreated": obj.date_added,
