@@ -1,5 +1,6 @@
 from typing import Any
 from unittest import mock
+from unittest.mock import MagicMock, patch
 
 import orjson
 import pytest
@@ -712,6 +713,49 @@ class TestMetricAlertsCreateDetectorValidator(TestMetricAlertsDetectorValidator)
             expected_message="Creation of transaction-based alerts is disabled, as we migrate to the span dataset. Create span-based alerts (dataset: events_analytics_platform) with the is_transaction:true filter instead.",
         ):
             validator.save()
+
+    def test_validate_comparison_delta(self) -> None:
+        static_type = AlertRuleDetectionType.STATIC.value
+        percent_type = AlertRuleDetectionType.PERCENT.value
+        anomaly_detection_type = AlertRuleDetectionType.DYNAMIC.value
+        missing_comparison_delta_error = (
+            "`comparisonDelta` is required when `detectionType` is 'percent'."
+        )
+        extraneous_comparison_delta_error = (
+            "`comparisonDelta` can only be set when `detectionType` is 'percent', not '%s'."
+        )
+
+        valid_configs = [
+            {"detectionType": static_type},
+            {"detectionType": anomaly_detection_type},
+            {"detectionType": percent_type, "comparisonDelta": 3600},
+        ]
+        for config in valid_configs:
+            data = {**self.valid_data, "config": config}
+            validator = MetricIssueDetectorValidator(data=data, context=self.context)
+            assert validator.is_valid(), (config, validator.errors)
+
+        invalid_configs = [
+            (
+                {"detectionType": percent_type},
+                missing_comparison_delta_error,
+            ),
+            (
+                {"detectionType": static_type, "comparisonDelta": 3600},
+                extraneous_comparison_delta_error % static_type,
+            ),
+            (
+                {"detectionType": anomaly_detection_type, "comparisonDelta": 3600},
+                extraneous_comparison_delta_error % anomaly_detection_type,
+            ),
+        ]
+        for config, error_message in invalid_configs:
+            data = {**self.valid_data, "config": config}
+            validator = MetricIssueDetectorValidator(data=data, context=self.context)
+            assert not validator.is_valid()
+            assert validator.errors == {
+                "config": [ErrorDetail(string=error_message, code="invalid")]
+            }
 
 
 class TestMetricAlertsTraceMetricsValidator(TestMetricAlertsDetectorValidator):
@@ -1871,3 +1915,86 @@ class TestMetricAlertsUpdateDetectorValidator(TestMetricAlertsDetectorValidator)
             update_validator.errors["dataSources"]["nonFieldErrors"][0]
             == "Invalid extrapolation mode: blah"
         )
+
+    @patch(
+        "sentry.seer.anomaly_detection.store_data_workflow_engine.make_store_data_request",
+        return_value=HTTPResponse(b'{"success":true}', status=200),
+    )
+    def test_validate_comparison_delta(self, mock_seer_request: MagicMock) -> None:
+        static_type = AlertRuleDetectionType.STATIC.value
+        percent_type = AlertRuleDetectionType.PERCENT.value
+        anomaly_detection_type = AlertRuleDetectionType.DYNAMIC.value
+        missing_comparison_delta_error = (
+            "`comparisonDelta` is required when `detectionType` is 'percent'."
+        )
+        extraneous_comparison_delta_error = (
+            "`comparisonDelta` can only be set when `detectionType` is 'percent', not '%s'."
+        )
+
+        valid_updates: list[dict[str, Any]] = [
+            {
+                "config": {"detectionType": static_type},
+            },
+            {
+                "config": {"detectionType": anomaly_detection_type},
+                "conditionGroup": self.valid_anomaly_detection_data["conditionGroup"],
+            },
+            {
+                "config": {"detectionType": percent_type, "comparisonDelta": 3600},
+            },
+        ]
+        for update_data in valid_updates:
+            new_config = update_data["config"]
+            # Create a detector of a different type than the one we're going to update it to be
+            detector = (
+                self.create_percent_detector()
+                if new_config["detectionType"] != percent_type
+                else self.create_static_detector()
+            )
+            update_validator = MetricIssueDetectorValidator(
+                instance=detector, data=update_data, context=self.context, partial=True
+            )
+
+            assert update_validator.is_valid(), (update_data, update_validator.errors)
+
+            update_validator.save()
+            detector.refresh_from_db()
+            assert detector.config == {
+                "detection_type": new_config["detectionType"],
+                **(
+                    {"comparison_delta": new_config["comparisonDelta"]}
+                    if "comparisonDelta" in new_config
+                    else {}
+                ),
+            }
+
+        invalid_configs: list[tuple[dict[str, Any], str]] = [
+            (
+                {"detectionType": percent_type},
+                missing_comparison_delta_error,
+            ),
+            (
+                {"detectionType": static_type, "comparisonDelta": 3600},
+                extraneous_comparison_delta_error % static_type,
+            ),
+            (
+                {"detectionType": anomaly_detection_type, "comparisonDelta": 3600},
+                extraneous_comparison_delta_error % anomaly_detection_type,
+            ),
+        ]
+        for new_config, error_message in invalid_configs:
+            # Create a detector of a different type than the one we're going to update it to be
+            detector = (
+                self.create_percent_detector()
+                if new_config["detectionType"] != percent_type
+                else self.create_static_detector()
+            )
+            update_data = {"config": new_config}
+            update_validator = MetricIssueDetectorValidator(
+                instance=detector, data=update_data, context=self.context, partial=True
+            )
+
+            assert not update_validator.is_valid()
+            assert update_validator.errors == {
+                "config": [ErrorDetail(string=error_message, code="invalid")]
+            }
