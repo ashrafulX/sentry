@@ -1,8 +1,16 @@
 import shlex
+from unittest import mock
 
 import pytest
 
 from sentry.agent_handoff.runbook import render_agent_runbook, render_claim_runbook
+from sentry.tasks.release_registry import APP_INDEX_CACHE_KEY
+
+INSTALLER_SHA256 = "a" * 64
+
+
+def registry_apps(checksum: object) -> dict[str, object]:
+    return {"sentry": {"files": {"install": {"checksums": {"sha256-hex": checksum}}}}}
 
 
 def render(**overrides: str) -> str:
@@ -108,3 +116,40 @@ def test_claim_runbook_explains_explicit_private_code_redemption() -> None:
     assert "Fetching this page does not claim it" in guide
     assert "curl -sS -X POST https://sentry.example.com/agents/" in guide
     assert "--data-urlencode 'handoff_code=HANDOFF_CODE'" in guide
+
+
+def test_installer_verifies_published_checksum() -> None:
+    with mock.patch("sentry.agent_handoff.runbook.cache.get") as cache_get:
+        cache_get.return_value = registry_apps(INSTALLER_SHA256)
+        guide = render()
+
+    cache_get.assert_called_once_with(APP_INDEX_CACHE_KEY)
+    environment = (
+        "SENTRY_HOST=https://sentry.example.com SENTRY_URL=https://sentry.example.com "
+        "SENTRY_CLIENT_ID=example-client-id SENTRY_SETUP_CODE=sntryc_example-setup-code"
+    )
+    assert "curl -fsSL https://cli.sentry.dev/install |" not in guide
+    assert 'curl -fsSL https://cli.sentry.dev/install -o "$installer"' in guide
+    assert f'if [ "$checksum" = "{INSTALLER_SHA256}" ]; then' in guide
+    assert f'  {environment} bash "$installer"; status=$?' in guide
+    assert "do not run the installer any other way" in guide
+
+
+@pytest.mark.parametrize(
+    "apps",
+    [
+        None,
+        {},
+        {"sentry": {"files": {}}},
+        registry_apps(None),
+        registry_apps("not-a-checksum"),
+        registry_apps("a" * 63 + "; id"),
+    ],
+)
+def test_installer_without_published_checksum_pipes_to_bash(apps: object) -> None:
+    with mock.patch("sentry.agent_handoff.runbook.cache.get", return_value=apps):
+        guide = render()
+
+    assert "curl -fsSL https://cli.sentry.dev/install | SENTRY_HOST=" in guide
+    assert "$checksum" not in guide
+    assert "do not run the installer any other way" not in guide
