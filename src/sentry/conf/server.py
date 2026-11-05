@@ -736,18 +736,6 @@ SIGNUP_VERIFICATION_EMAIL_SALT = os.environ.get(
     "SIGNUP_VERIFICATION_EMAIL_SALT", "signup-verification-email-salt"
 )
 
-# Auth engines and the settings required for them to be listed
-AUTH_PROVIDERS = {
-    "github": ("GITHUB_APP_ID", "GITHUB_API_SECRET"),
-    "bitbucket": ("BITBUCKET_CONSUMER_KEY", "BITBUCKET_CONSUMER_SECRET"),
-    "asana": ("ASANA_CLIENT_ID", "ASANA_CLIENT_SECRET"),
-    "visualstudio": (
-        "VISUALSTUDIO_APP_ID",
-        "VISUALSTUDIO_APP_SECRET",
-        "VISUALSTUDIO_CLIENT_SECRET",
-    ),
-}
-
 AUTH_PROVIDER_LABELS = {
     "github": "GitHub",
     "bitbucket": "Bitbucket",
