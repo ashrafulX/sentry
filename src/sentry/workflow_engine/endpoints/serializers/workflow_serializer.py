@@ -44,9 +44,9 @@ class TriggerSerializerResponse(TypedDict, total=False):
 
 
 class WorkflowSerializerResponse(TypedDict):
-    id: Annotated[str, ApiDescription("Alert ID")]
-    name: Annotated[str, ApiDescription("Alert name")]
-    type: VisibleWorkflowType
+    id: Annotated[str, ApiDescription("Workflow ID")]
+    name: Annotated[str, ApiDescription("Workflow name")]
+    type: Annotated[VisibleWorkflowType, ApiDescription("Workflow type")]
     organizationId: str
     createdBy: str | None
     dateCreated: datetime
